@@ -62,7 +62,7 @@ def scrubInput(run_name,local_alignment=True,similarity=True,domain='SCOP'):
      rows_list = []
 
      domain_dict=readDomains(domain)
-     homomer_domains=getUniqueHomodimerDomains(100)
+     #homomer_domains=getUniqueHomodimerDomains(100)
 
           
      for result in glob.glob('/scratch/asl47/PDB/results/{}/*.results'.format(run_name)):
@@ -75,6 +75,7 @@ def scrubInput(run_name,local_alignment=True,similarity=True,domain='SCOP'):
                if len(raw)==1:
                     print("Empty ID on {}".format(d['id']))
                     continue
+               d['chains'] = tuple(sorted(raw[1].split()))
                
                if any('#' in line for line in raw):
                     homologies=tuple(filter(lambda element: '#' in element,raw))
@@ -86,14 +87,18 @@ def scrubInput(run_name,local_alignment=True,similarity=True,domain='SCOP'):
                     d['BSA']=((float(bsa[2].split()[-1])+float(bsa[1].split()[-1]))-float(bsa[0].split()[-1]))/2
                     
                if d['id'][:4] in domain_dict:
-                    chains=raw[1].split()
-                    d['domain']=domainMatch(domain_dict[d['id'][:4]],*chains)
-                    if d['domain']=='full' or d['domain']=='partial':
-                         d['d_group']=any([tuple(domain_dict[d['id'][:4]][c]) in homomer_domains for c in chains])
+                    d['domain']=domainMatch(domain_dict[d['id'][:4]],*d['chains'])
+                    if d['domain']=='full':
+                         d['arch']=domain_dict[d['id'][:4]][d['chains'][0]]
+                    else:
+                         d['arch']=None
+                         #or d['domain']=='partial':
+
+                         #d['d_group']=any([tuple(domain_dict[d['id'][:4]][c]) in homomer_domains for c in d['chains']])
                     #elif 'Homodimer' in path:
                     #     d['d_group']=None
-                    else:
-                         d['d_group']='none'
+                    #else:
+                    #     d['d_group']='none'
                     
                          
                          
@@ -176,14 +181,16 @@ def plotLevy(df,plo='BSA'):
      print(stats.mannwhitneyu(data.loc[data['homol']==1]['BSA'],data.loc[data['homol']==0]['BSA'],alternative='greater'))
 
 ##invert domain data, into a dictionary with architecture key and pdb values
-def invertDomains(domains):
+def invertDomains(domains,ids=None):
      inverted=defaultdict(list)
 
      for k,v in domains.items():
           if not v:
                continue
-          elif len(set(tuple(dom) for dom in v.values())) > 1:
+          elif k not in ids:
                continue
+          elif ids and len(set(tuple(v[chain]) for chain in ids[k])):
+               continue          
                
           arch=tuple(list(v.values())[0])
           inverted[arch].append(k)
@@ -191,20 +198,23 @@ def invertDomains(domains):
                     
 
      
-def correspondingHomodimers():
-     het=scrubInput('PDB_Heterodimers',0,1,'CATH')
-     full_ids=[id_[:4] for id_ in het.loc[het['domain']=='full']['id']]
+def correspondingHomodimers(heteromerics, homomerics):
 
-     het_dom=readDomains('CATH')
-     het_dom={id_:het_dom[id_] for id_ in full_ids}
+     domain_groupings={}
+     for idx,data in enumerate((heteromerics,homomerics)):
+          for _,row in data.iterrows():
+               if row['arch'] is None:
+                    continue
+               domain=' '.join(row['arch'])
+               if domain not in domain_groupings:
+                    domain_groupings[domain]=([],[])
+               else:
+                    domain_groupings[domain][idx].append('{}_{}_{}'.format(row['id'][:4],*row['chains']))
 
+     non_trivial={domains: pdb_pairs for domains,pdb_pairs in domain_groupings.items() if all(pdb_pairs)}
+     with open('domain_groups.json', 'w') as file_:
+          file_.write(json.dumps(non_trivial))
+                
+     return non_trivial
 
-     heteromeric_inv=invertDomains(het_dom)
-     hom_dom=readDomains('HCath')
-     homomeric_inv=invertDomains(hom_dom)
-
-     for arch,pdbs in heteromeric_inv.items():
-          if arch in homomeric_inv:
-               yield (pdbs,homomeric_inv[arch])
-     yield
           

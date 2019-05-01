@@ -1,11 +1,43 @@
 #!/usr/bin/env python3                                                     
 import sys
 import os
+import json
 
 from collections import defaultdict
 import os.path
 
 import xml.etree.ElementTree as ET
+
+BASE_PATH='/scratch/asl47/PDB/'
+import urllib.request
+import shutil
+
+
+    
+
+def pullXML(pdb_code_file):
+    URL_base='http://www.ebi.ac.uk/pdbe/pisa/cgi-bin/interfaces.pisa?'
+    pdbs=[]
+    with open(pdb_code_file) as file_in:
+        data=json.load(file_in)
+        for pairing in data.values():
+            for pair in pairing:
+                pdbs.extend([id_[:4] for id_ in pair])
+
+    PER_CALL=40
+    for slice_ in range(0,len(pdbs),PER_CALL):
+        url=URL_base+','.join(pdbs[slice_:slice_+PER_CALL])
+        with urllib.request.urlopen(url) as response, open(BASE_PATH+'XML/XML_temp.xml', 'wb') as out_file:
+            shutil.copyfileobj(response, out_file)
+        splitXML(BASE_PATH+'XML/XML_temp.xml')
+
+    with open(BASE_PATH+'XML/xml_list.txt','w') as file_out:
+        file_out.write(', '.join(map(str.upper,pdbs)))
+
+    parseXML(BASE_PATH+'XML/xml_list.txt')
+
+    
+    
 
 def splitXML(input_file='pisa.xml'):
     print('Spliting xml file')    
@@ -21,7 +53,7 @@ def splitXML(input_file='pisa.xml'):
                 file_string += line[2:]
                 ##end of entry, write to its own file
                 if '</pdb_entry>' in line:
-                    with open('XML/{}.xml'.format(pdb_name),'w') as out_file:
+                    with open(BASE_PATH+'XML/{}.xml'.format(pdb_name),'w') as out_file:
                         out_file.write(file_string)
                     file_string=''
 
@@ -54,7 +86,7 @@ def parseXML(xml_list = 'xml_list.txt'):
             print('parsing entry '+pdb_entry)
 
             ##load tree in xml_format and convert recursively to dicts
-            tree = ET.parse('XML/{}.xml'.format(pdb_entry))
+            tree = ET.parse(BASE_PATH+'XML/{}.xml'.format(pdb_entry))
             d = etree_to_dict(tree.getroot())
 
             if d['pdb_entry']['status'] == 'Ok':
@@ -81,7 +113,7 @@ def parseXML(xml_list = 'xml_list.txt'):
                             inter[chain][int(res['seq_num'])].append(id_elements[not idx]+' '+res['asa']+' '+res['bsa']+' '+id_elements[idx])                  
 
                 ##write interactions to .int file
-                with open('INT/{}.int'.format(pdb_entry),'w') as int_file:
+                with open(BASE_PATH+'INT/{}.int'.format(pdb_entry),'w') as int_file:
                     for chain,residues in sorted(name.items()):
                         for res_seq,res_name in sorted(residues.items()):
                             int_file.write('{}\t{}\t{}\t'.format(chain,res_seq,res_name) + '\t'.join(inter[chain][res_seq])+'\n')

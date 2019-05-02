@@ -34,25 +34,19 @@ def makeTypes(pdb):
     similaritythresh = 2.0
     type_ = {}
     with open(BASE_PATH+'INT/{}.int'.format(pdb)) as file_:
-        for line in file_:
-            l = line.strip().split('\t')
-            chain = l[0]
-            res = l[1]
-            if len(l) == 4:
-                ll = l[3].split()
-                if float(ll[2]) > 0:
-                    type_[chain+res] = tuple(reversed(ll[0].split('_')))
-            if len(l) > 4:
-                jjj = []
-                for j in l[3:]:
-                    jj = j.split()
-                    if float(jj[2]) > 0:
-                        jjj.append((jj,float(jj[2])))
-                if jjj != []:
-                    if not(len(jjj) == 2 and abs(jjj[0][1]-jjj[1][1]) < similaritythresh and jjj[0][0][0] == jjj[1][0][3] and jjj[0][0][3] == jjj[1][0][0]): #SYMMETRIC INTERFACE: ALWAYS PICK FIRST COLUMN, OTHERWISE SORT
-                        jjj.sort(key=itemgetter(1),reverse=True)
-                    type_[chain+res] = tuple(reversed(jjj[0][0][0].split('_')))
+        for line_raw in file_:
+            line = line_raw.split('\t')
+            chain,res = line[:2]
+
+            interactions=[(a,d,float(c)) for (a,b,c,d) in (Q.split() for Q in line[3:]) if c!='0']
+                
+            if interactions:
+                if len(interactions) != 2 or abs(interactions[0][2]-interactions[1][2]) >= similaritythresh or interactions[0][0] != interactions[1][1] or interactions[0][1] != interactions[1][0]: 
+                    interactions.sort(key=itemgetter(2),reverse=True)
+                    
+                type_[chain+res] = tuple(reversed(interactions[0][0].split('_')))
     return type_
+        
 
 ##scrape FASTA sequence for both chains, and the alignment interactions 
 def readNeedle(pdbs):
@@ -80,15 +74,17 @@ def makeInteractions(type_, seq, chain):
 
     def numalpha(s):
         if int(s) > 9:
+            #print("pre",s)
             s = str(10+(int(s)-10)%26) # WRAP ROUND NUMBERS LARGER THAN 35 BACK TO a, b, c...
             s = chr(97+int(s)-10)
+            #print("post",s)
         return s
 
     c = 0
     inter_A = ''
     inter_B = ''
-    for i in range(len(seq)):
-        if seq[i] != '-':
+    for element in seq:
+        if element != '-':
             chain_key = chain+str(c)
             if chain_key in type_:
                 inter_A += numalpha(type_[chain_key][0])
@@ -125,18 +121,13 @@ def writePmatrix(pdbs,inter1a,inter1b,inter2a,inter2b):
         key2.add(c+d)
 
     with open(BASE_PATH+'PALIGN/{}_{}_{}_{}.pmatrix'.format(*pdbs),'w') as pmatrix_out:
-        pmatrix_out.write('\t')
-
         ##write column headers
-        pmatrix_out.write('\t'.join(map(str,sorted(key2)))+'\n')
+        pmatrix_out.write('\t'+'\t'.join(map(str,sorted(key2)))+'\n')
 
         for i in sorted(key1):
-            ##write row header
-            pmatrix_out.write('{}\t'.format(i))
-            ##write row values
-            pmatrix_out.write('\t'.join(map(str,(mat[(i,j)] for j in sorted(key2))))+'\n')
+            ##write row header + values
+            pmatrix_out.write('{}\t'.format(i)+'\t'.join(map(str,(mat[(i,j)] for j in sorted(key2))))+'\n')
 
-        pmatrix_out.write('\n')
     
                 
 def generateAssistiveFiles(pdbs):
@@ -149,35 +140,24 @@ def generateAssistiveFiles(pdbs):
     int_1A,int_1B=makeInteractions(type1,seq1,pdbs[1])
     int_2A,int_2B=makeInteractions(type2,seq2,pdbs[3])
 
-
-
     writePialign(pdbs,int_1A,int_1B,int_2A,int_2B,align,seq1,seq2)
     writePmatrix(pdbs,int_1A,int_1B,int_2A,int_2B)
     
 
-#if __name__ == "__main__":
-#    if len(sys.argv) == 5:       
-#        #needleAlign(*sys.argv[1:])
-#        generateAssistiveFiles(sys.argv[1:])
-#    else:
-#        print('Wrong arguments')
 
 def pcombine(pvalues):
-    if 0 in pvalues:
-        print(pvalues)
-        sys.exit()
-    return scipy.stats.combine_pvalues(pvalues,method='fisher')[1]
+    return None if not all(pvalues) else scipy.stats.combine_pvalues(pvalues,method='fisher')[1]
 
 def binomialcdf(n,m1,m2,n1,n2,novg):
-    return 1.0-scipy.stats.binom.cdf(n-1,novg,1.0*m1*m2/(n1*n2))
+    return scipy.stats.binom.sf(n-1,novg,m1*m2/(n1*n2))
 
 def MatAlign(pdb_1,chain_1,pdb_2,chain_2):
     matchmatrix = {}
     matchmatrixnorm = {}
     matchmatrixneedle = {}
     length = {}
-    jkeys = set()
-    kkeys = set()
+    #jkeys = set()
+    #kkeys = set()
     with open(BASE_PATH+'NEEDLE/{}_{}_{}_{}.needle'.format(pdb_1,chain_1,pdb_2,chain_2)) as needle_file:
         for line in needle_file:
             lss=line.strip().split()
@@ -229,6 +209,7 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2):
     pvalues.sort()
 
 
+
     ranked = defaultdict(list)
     for row in range(len(matrix)):
         for column in range(len(matrix[row])):
@@ -241,7 +222,7 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2):
     for kk in sorted(ranked.keys()):
         for kkk in ranked[kk]:
             if kkk[0] not in already0 and kkk[1] not in already1:
-                #fff.write('{}\t{}\t{}\t{}'.format(pbd_1,chain_1,pdb_2,chain_2)+'\t'+'\t'.join(list(h2[kkk[0]]))+'\t'+'\t'.join(list(h1[kkk[1]]))+'\t'+str(pmatrix[kkk[0]][kkk[1]])+'\t'+str(1.0*matrix[kkk[0]][kkk[1]]/total)+'\n')
+
 
                 if row_headers[kkk[0]] != '-' and column_headers[kkk[1]] != '-':
                     if chain_1 not in matchmatrix:
@@ -250,59 +231,14 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2):
                         matchmatrixnorm[chain_1] = {}
                     matchmatrix[chain_1][chain_2] += matrix[kkk[0]][kkk[1]]/total
                     matchmatrixnormtmp.append(pmatrix[kkk[0]][kkk[1]])
-                    jkeys.add(chain_1) # NECESSARY DUE TO GAPS
-                    kkeys.add(chain_2) # NECESSARY DUE TO GAPS
+
                 already0.add(kkk[0])
                 already1.add(kkk[1])
-    if matchmatrixnormtmp != []: 
-        if chain_1 not in matchmatrixnorm:
-            matchmatrixnorm[j] = {}#defaultdict(float)
-        matchmatrixnorm[chain_1][chain_2] = pcombine(matchmatrixnormtmp)
-
-    ##mass printing
-    ##end
-
-
-    if len(matchmatrix.keys()) > 0:
-        maxperm = []
-        minp = 1E6
-        slk, slj = sorted([list(kkeys),list(jkeys)],key=len)
-
-        total = scipy.special.perm(len(slj),len(slk),exact=True)
-        if total < 1000000:
-            for kk in itertools.permutations(slj,len(slk)):
-                mapvalues = []
-                needlevalues = []
-                for kkk in range(len(slk)):
-                    mapvalues.append(matchmatrixnorm[kk[kkk]][slk[kkk]])
-                    needlevalues.append(matchmatrixneedle[kk[kkk]][slk[kkk]])
-                    
-                pc = pcombine(mapvalues) 
-                if pc < minp:
-                    minp = pc
-                    maxperm = []
-                    for kkk in range(len(slk)):
-                        maxperm.append((kk[kkk],slk[kkk],mapvalues[kkk],needlevalues[kkk]))
-        #else:
-        #    print(i,total)
-
-        mvtmp = []
-        for kk in maxperm:
-            #ffffff.write(str(i[0])+'\t'+str(i[1])+'\t')
-            #for kkk in kk:
-            #    ffffff.write(str(kkk)+'\t')
-            mvtmp.append(kk[-2])
-            #ffffff.write('\n')
-            sout = '{}_{}\t{}_{}'.format(pdb_1,chain_1,pdb_2,chain_2)
-
-            for kkk in kk:
-                sout += str(kkk)+'\t'
-            mvtmp.append(kk[-2])
-            sout += '\n'
-            return kk[2]
-            #print(sout)
-        #if mvtmp != [] and max(mvtmp) > thresh:
-        #    fd.write('"'+str(i[0])+'" -> "'+str(i[1])+'";\n')
+    print(already0,already1)
+    if matchmatrixnormtmp:
+        return pcombine(matchmatrixnormtmp)
+    else:
+        return None
         
     
 def runAlignBatch(pdb_code_file):
@@ -342,18 +278,31 @@ def randomArrange():
     return random_samples
 
 import pandas as pd
+import matplotlib.pyplot as plt
 
 def plotComps(ls):
+    plt.figure()
+    labels={'':'Domains',2:'Random Shuffle',3:'Random Shuffle'}
+    vx=[]
     for l in ls:
-        pass
+        df = loadD(l)
+        ps = df['p']
+        ns,_,_=plt.hist(ps,bins=100,density=True,histtype='step',label=labels[l])
+        vx.append(ns)
+    vx=np.array(vx)
+    plt.plot(np.linspace(0,1,100),vx[0]/np.mean(vx[1:],axis=0),c='k',lw=2)
+    plt.plot([0,1],[1,1],'k--')
+
+    plt.yscale('log',nonposy='mask')
+    plt.legend()
+    plt.show(block=False)
             
-def loadD():
+def loadD(i):
     ds=[]
-    with open('pre_lim.json') as file_in:
+    with open('pre_lim{}.json'.format(i)) as file_in:
         data=json.load(file_in)
     for k,v in data.items():
         if v is None:
-            print(k)
             continue
         d={}
         d['het']=k[:4]

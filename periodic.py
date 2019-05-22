@@ -6,6 +6,10 @@ def readHeteromers(file_path='~/Downloads/PeriodicTable.csv'):
 def domainStrictness():
     pass
 
+def scrapePDBs(df):
+    with open('period_pdb_codes.txt', 'w') as file_out:
+          file_out.write(', '.join(df['PDB ID']))
+
 def trya(df):
     key='List of interface types (all identical subunits are given the same code)'
 
@@ -41,4 +45,6 @@ def trya(df):
                 1
 
     return 1
-                
+
+if __name__ == "__main__":
+    scrapePDBs(readHeteromers)

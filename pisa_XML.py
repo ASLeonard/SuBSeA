@@ -12,29 +12,40 @@ BASE_PATH='/scratch/asl47/PDB/'
 import urllib.request
 import shutil
 
-
-    
+  
 
 def pullXML(pdb_code_file):
-    URL_base='http://www.ebi.ac.uk/pdbe/pisa/cgi-bin/interfaces.pisa?'
+    print('Loading PDB files')
     pdbs=[]
     with open(pdb_code_file) as file_in:
-        data=json.load(file_in)
-        for pairing in data.values():
-            for pair in pairing:
-                pdbs.extend([id_[:4] for id_ in pair])
+        for line in file_in:
+            pdbs.extend(line.split(', '))
+    print('Loaded PDB files')
+    #    data=json.load(file_in)
+    #    for pairing in data.values():
+    #        for pair in pairing:
+    #            pdbs.extend([id_[:4] for id_ in pair])
 
+    
+    URL_base='http://www.ebi.ac.uk/pdbe/pisa/cgi-bin/interfaces.pisa?'
     PER_CALL=40
+    print('Downloading XML from EBI')
     for slice_ in range(0,len(pdbs),PER_CALL):
         url=URL_base+','.join(pdbs[slice_:slice_+PER_CALL])
         with urllib.request.urlopen(url) as response, open(BASE_PATH+'XML/XML_temp.xml', 'wb') as out_file:
             shutil.copyfileobj(response, out_file)
         splitXML(BASE_PATH+'XML/XML_temp.xml')
+        print('Split chunk {}'.format(slice_))
+
+    print('Cleaning temporary files')
+    os.remove(BASE_PATH+'XML/XML_temp.xml')
 
     with open(BASE_PATH+'XML/xml_list.txt','w') as file_out:
         file_out.write(', '.join(map(str.upper,pdbs)))
 
-    parseXML(BASE_PATH+'XML/xml_list.txt')
+    print('Parsing individual files')
+    parseXML()
+    print('Parsed all files')
 
     
     
@@ -77,46 +88,50 @@ def etree_to_dict(t):
             d[t.tag] = text
     return d
 
+
+##Converts XML file to INT file
 def parseXML(xml_list = 'xml_list.txt'):
     ## consider all interfaces by default
-    cssthresh = 0.0 
+    cssthresh = 0.0
+    
+    if isinstance(xml_list, str):
+        with open(xml_list,'r') as file_:
+            xml_list=file_.readline().rstrip().split(', ')
+    for pdb_entry in xml_list:
+        print('Parsing entry '+pdb_entry)
 
-    with open(xml_list,'r') as file_:
-        for pdb_entry in file_.readline().rstrip().split(', '):
-            print('parsing entry '+pdb_entry)
+        ##load tree in xml_format and convert recursively to dicts
+        tree = ET.parse(BASE_PATH+'XML/{}.xml'.format(pdb_entry))
+        d = etree_to_dict(tree.getroot())
 
-            ##load tree in xml_format and convert recursively to dicts
-            tree = ET.parse(BASE_PATH+'XML/{}.xml'.format(pdb_entry))
-            d = etree_to_dict(tree.getroot())
+        if d['pdb_entry']['status'] == 'Ok':
+            name = {}
+            inter = {}
+            if d['pdb_entry']['n_interfaces'] == '1':
+                d['pdb_entry']['interface'] = [d['pdb_entry']['interface']]
+            for interface in d['pdb_entry']['interface']:
+                if float(interface['css']) < cssthresh or not all(molecule['class'] == 'Protein' for molecule in interface['molecule'][:2]):
+                    continue
 
-            if d['pdb_entry']['status'] == 'Ok':
-                name = {}
-                inter = {}
-                if d['pdb_entry']['n_interfaces'] == '1':
-                    d['pdb_entry']['interface'] = [d['pdb_entry']['interface']]
-                for interface in d['pdb_entry']['interface']:
-                    if float(interface['css']) < cssthresh or not all(molecule['class'] == 'Protein' for molecule in interface['molecule'][:2]):
-                        continue
+                id_elements = ['{}_{}'.format(molecule['chain_id'],molecule['symop_no']) for molecule in interface['molecule'][:2]]
+                for idx,molecule in enumerate(interface['molecule'][:2]):
+                    chain = molecule['chain_id']
+                    if chain not in name:
+                        name[chain]={}
+                        inter[chain] = defaultdict(list)
+                    symOP = molecule['symop_no']
+                    residue = molecule['residues']['residue']
+                    if isinstance(residue,dict):
+                        residue=[residue]
+                    for res in residue:
+                        name[chain][int(res['seq_num'])] = res['name']
+                        inter[chain][int(res['seq_num'])].append(id_elements[not idx]+' '+res['asa']+' '+res['bsa']+' '+id_elements[idx])                  
 
-                    id_elements = ['{}_{}'.format(molecule['chain_id'],molecule['symop_no']) for molecule in interface['molecule'][:2]]
-                    for idx,molecule in enumerate(interface['molecule'][:2]):
-                        chain = molecule['chain_id']
-                        if chain not in name:
-                            name[chain]={}
-                            inter[chain] = defaultdict(list)
-                        symOP = molecule['symop_no']
-                        residue = molecule['residues']['residue']
-                        if isinstance(residue,dict):
-                            residue=[residue]
-                        for res in residue:
-                            name[chain][int(res['seq_num'])] = res['name']
-                            inter[chain][int(res['seq_num'])].append(id_elements[not idx]+' '+res['asa']+' '+res['bsa']+' '+id_elements[idx])                  
-
-                ##write interactions to .int file
-                with open(BASE_PATH+'INT/{}.int'.format(pdb_entry),'w') as int_file:
-                    for chain,residues in sorted(name.items()):
-                        for res_seq,res_name in sorted(residues.items()):
-                            int_file.write('{}\t{}\t{}\t'.format(chain,res_seq,res_name) + '\t'.join(inter[chain][res_seq])+'\n')
+            ##write interactions to .int file
+            with open(BASE_PATH+'INT/{}.int'.format(pdb_entry),'w') as int_file:
+                for chain,residues in sorted(name.items()):
+                    for res_seq,res_name in sorted(residues.items()):
+                        int_file.write('{}\t{}\t{}\t'.format(chain,res_seq,res_name) + '\t'.join(inter[chain][res_seq])+'\n')
                         
 
 
@@ -124,6 +139,10 @@ if __name__ == "__main__":
     try:
         if len(sys.argv) == 1:
             print('Not enough arguments')
+        elif '.txt' in sys.argv[1]:
+            print('About to pull XML files')
+            pullXML(sys.argv[1])
+            print('Finished XML operations')
         elif sys.argv[1] == 'split':
             splitXML()
         elif '.xml' in sys.argv[1]:

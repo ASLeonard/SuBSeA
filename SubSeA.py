@@ -280,7 +280,7 @@ def paralleliseAlignment(pdb_pairs):
     print('Parellelising alignment')
     results = Manager().dict()
     with Pool() as pool:
-        for (key,p_value) in pool.map(calculatePvalue,pdb_pairs,chunksize=50):
+        for (key,p_value) in pool.map_async(calculatePvalue,pdb_pairs,chunksize=50):
             results['{}_{}_{}_{}'.format(*key)]=p_value
 
     return results.copy()

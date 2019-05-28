@@ -1,5 +1,6 @@
 import pandas
 from domains import readDomains, invertDomains
+from SubSeA import paralleliseAlignment
 
 def readHeteromers(file_path='~/Downloads/PeriodicTable.csv'):
     return pandas.read_csv(file_path)
@@ -18,62 +19,61 @@ def linkedProteinGenerator(df):
     N_SAMPLE_LIMIT = 500
     inverted_homodimer_domains = invertDomains(readDomains('HCath'))
     ALL_domains = readDomains('CATH-B')
+    chain_map = chainMap()
 
     result_rows = []
 
+    i=0
     for _, row in df.iterrows():
         pdb = row['PDB ID']
+
+        #if pdb not in chain_map:
+        #    print('Skipping',pdb)
+        #    continue
 
         domains = ALL_domains[pdb]
 
         ##empty domain, no point continuing
         if not domains:
             continue
-        domain_edges = sorted(domains.keys())
-        
-        ordered_edges = []
-        for r in row[key_interfaces].split(','):
-            ordered_edges.extend(r.split('-'))
-        
-        ordered_edges = sorted(set(ordered_edges))
         
         interactions=[pair for pair, active in zip(row[key_interfaces].split(','),row[key_reduced].split(',')) if active == '1']
 
-
+        
+                    
         for i,pair in enumerate(interactions):
             e1, e2 = pair.split('-')
 
             ##heteromeric interaction
             if e1 != e2:
-                domains = ALL_domains[pdb]
-                
-                domain_edges = sorted(domains.keys())
-
                 domain_overlap = 1 ##need to implement
                 
                 for edge in (e1, e2):
-                    #comparables =
-                    try:
-                        edge = domain_edges[ordered_edges.index(edge)]
-                    except:
-                        print('bad length on', pdb)
-                        print(ordered_edges, domain_edges)
+
+                    ##relabel domain
+                    if pdb in chain_map and edge in chain_map[pdb]:
+                        edge = chain_map[pdb][edge]
+
+                    ##no information on this subunit for domains
+                    if edge not in domains:
                         continue
+                    #try:
+                    #    edge = domain_edges[ordered_edges.index(edge)]
+                    #except:
+                    #    print('bad length on', pdb)
+                    #    print(ordered_edges, domain_edges)
+                    #    continue
                     if tuple(domains[edge]) in inverted_homodimer_domains:
                         for comp in inverted_homodimer_domains[tuple(domains[edge])]:
+                            i+=1
+                            if i>100:
+                                return
                             yield (pdb + '_' + edge, '{}_{}'.format(*comp.split('_')))
-                        #result_rows.append({'pdb':pdb, 'chain': edge, 'ref': comp, 'domain_overlap': 'full', 'heteromer_overlap': domain_overlap})
+                        
     return
-        #for row in result_rows:
-                    
-                #find domain overlaps
-                #run alignment on matches
-                #store in nested heirarchy
-                
 
-    #return 1
 def fnc(d):
-    (het,hom) = pdb_combination
+    (het,hom) = d
     args=(het[:4].upper(),het[5],hom[:4].upper(),hom[5])
     return '{}||{}'.format(args[0],args[2])
     
@@ -81,10 +81,18 @@ from multiprocessing import Pool
 def qqq(gener):
     with Pool() as pool:
         results = pool.map(fnc,gener,50)
-    return len(results)
+    
+    return sum(1 for _ in results)
 
+from collections import defaultdict
 def chainMap():
-    chainmap = {}
+    chainmap = defaultdict(dict)
+    with open('chain_map.txt','r') as file_:
+        for line in file_:
+            (pdb, file_chain, pdb_chain) = line.rstrip().split('\t')
+            chainmap[pdb][file_chain] = pdb_chain
+    return dict(chainmap)
+
     fc = open('chain_map.txt')
     for line in fc:
         l = line.strip().split('\t')
@@ -120,7 +128,14 @@ def chainMap():
         if len(pfaml[i]) > 0:
             pfam[i] = {}
             for j in pfaml[i]:
-                pfam[i][j] = ';'.join(sorted(list(pfaml[i][j]))) #';'.join(set(list(pfaml[i][j])))  
-        
+                pfam[i][j] = ';'.join(sorted(list(pfaml[i][j]))) #';'.join(set(list(pfaml[i][j])))
+
+    return pfam
+
+import json        
 if __name__ == "__main__":
-    scrapePDBs(readHeteromers)
+    df = scrapePDBs(readHeteromers)
+    gener = linkedProteinGenerator(df)
+    dic = paralleliseAlignment(gener)
+    with open('first_run.dict','w') as f_out:
+        json.dump(dic,f_out)

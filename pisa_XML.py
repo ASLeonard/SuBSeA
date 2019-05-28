@@ -1,4 +1,4 @@
-#!/usr/bin/env python3                                                     
+#!/usr/bin/env python3
 import sys
 import os
 import json
@@ -12,7 +12,7 @@ BASE_PATH='/scratch/asl47/PDB/'
 import urllib.request
 import shutil
 
-  
+
 
 def pullXML(pdb_code_file):
     print('Loading PDB files')
@@ -26,7 +26,7 @@ def pullXML(pdb_code_file):
     #        for pair in pairing:
     #            pdbs.extend([id_[:4] for id_ in pair])
 
-    
+
     URL_base='http://www.ebi.ac.uk/pdbe/pisa/cgi-bin/interfaces.pisa?'
     PER_CALL=40
     print('Downloading XML from EBI')
@@ -40,20 +40,18 @@ def pullXML(pdb_code_file):
     print('Cleaning temporary files')
     os.remove(BASE_PATH+'XML/XML_temp.xml')
 
-    with open(BASE_PATH+'XML/xml_list.txt','w') as file_out:
-        file_out.write(', '.join(map(str.upper,pdbs)))
+    #with open(BASE_PATH+'XML/xml_list.txt','w') as file_out:
+    #    file_out.write(', '.join(map(str.upper,pdbs)))
 
     print('Parsing individual files')
-    parseXML()
+    parseXML(pdbs)
     print('Parsed all files')
 
-    
-    
 
-def splitXML(input_file='pisa.xml'):
-    print('Spliting xml file')    
+def splitXML(input_file):
+    print('Spliting xml file')
     file_string=''
-    
+
     with open(input_file,'r') as file_:
         for line in file_:
             ##get the pdb id from the code tag
@@ -90,18 +88,23 @@ def etree_to_dict(t):
 
 
 ##Converts XML file to INT file
-def parseXML(xml_list = 'xml_list.txt'):
+def parseXML(xml_list):
     ## consider all interfaces by default
     cssthresh = 0.0
-    
+
     if isinstance(xml_list, str):
         with open(xml_list,'r') as file_:
             xml_list=file_.readline().rstrip().split(', ')
     for pdb_entry in xml_list:
+        pdb_entry=pdb_entry.upper()
         print('Parsing entry '+pdb_entry)
 
         ##load tree in xml_format and convert recursively to dicts
-        tree = ET.parse(BASE_PATH+'XML/{}.xml'.format(pdb_entry))
+        try:
+            tree = ET.parse(BASE_PATH+'XML/{}.xml'.format(pdb_entry))
+        except FileNotFoundError:
+            print('Missing XML data on '+pdb_entry)
+            continue
         d = etree_to_dict(tree.getroot())
 
         if d['pdb_entry']['status'] == 'Ok':

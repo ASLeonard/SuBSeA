@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import sys
 import json
 import requests
 from collections import defaultdict, Counter
@@ -10,7 +10,7 @@ def pullDomains(pdb_id, style_key='CATH-B'):
 
      data=requests.get('http://www.ebi.ac.uk/pdbe/api/mappings/{}/{}'.format('scop' if style_key == 'SCOP' else 'cath_b', pdb_id)).json()
      domain_arch=defaultdict(list)
-     
+
      for class_id, superfam in data[pdb_id][style_key].items():
           if style_key == 'SCOP':
                class_id=superfam['superfamily']['sunid']
@@ -19,16 +19,16 @@ def pullDomains(pdb_id, style_key='CATH-B'):
      return dict(domain_arch)
 
 def writeDomains(pdb_list,class_type='SCOP'):
-     
-     if isinstance(pdb_list, str):
+    if isinstance(pdb_list, str):
         with open(pdb_list,'r') as file_:
             pdb_list=file_.readline().rstrip().split(', ')
-     ##pull domain information from EBI for all PDBs
-     domains={pdb: pullDomains(pdb,class_type) for pdb in pdb_list}
+    ##pull domain information from EBI for all PDBs
+    print('Pulling domains')
+    domains={pdb: pullDomains(pdb,class_type) for pdb in pdb_list}
 
-     ##write to json file
-     with open('domain_architectures_{}.json'.format(class_type), 'w') as file_out:
-          file_out.write(json.dumps(domains))
+    ##write to json file
+    with open('domain_architectures_{}.json'.format(class_type), 'w') as file_out:
+        file_out.write(json.dumps(domains))
 
 def readDomains(file_name='SCOP'):
      with open('domain_architectures_{}.json'.format(file_name)) as f:
@@ -65,11 +65,10 @@ def invertDomains(domains,ids=None):
           elif k not in ids:
                continue
           elif ids and len(set(tuple(v[chain]) for chain in ids[k])):
-               continue          
-               
+               continue
           arch=tuple(list(v.values())[0])
           inverted[arch].append(k)
-     return inverted 
+     return inverted
 
 if __name__ == "__main__":
     try:
@@ -77,4 +76,6 @@ if __name__ == "__main__":
             print('Not enough arguments')
         elif '.txt' in sys.argv[1]:
             print('About to pull domains')
-            writeDomains(sys.argv[1])
+            writeDomains(sys.argv[1],'CATH-B')
+    except Exception as e:
+        print('err', e)

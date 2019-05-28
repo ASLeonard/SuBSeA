@@ -62,14 +62,13 @@ def invertDomains(domains,ids=None):
      for k,v in domains.items():
           if not v:
                continue
-          elif k not in ids:
-               continue
-          elif ids and len(set(tuple(v[chain]) for chain in ids[k])):
-               continue
+          #elif k not in ids:
+          #     continue
+          #elif ids and len(set(tuple(v[chain]) for chain in ids[k])):
+          #     continue
           arch=tuple(list(v.values())[0])
-          inverted[arch].append(k)
-     return inverted
-
+          inverted[arch].append('{}_{}'.format(k,list(v.keys())[0]))
+     return dict(inverted)
 if __name__ == "__main__":
     try:
         if len(sys.argv) == 1:
@@ -78,4 +77,4 @@ if __name__ == "__main__":
             print('About to pull domains')
             writeDomains(sys.argv[1],'CATH-B')
     except Exception as e:
-        print('err', e)
+        print('err',e)

@@ -260,7 +260,7 @@ def calculatePvalue(pdb_combination):
     n_r, m_r = generateAssistiveFiles(args)
     return (args,MatAlign(*args,needle_result=n_r,matrix_result=m_r))
     
-def runAlignBatch(pdb_code_file):
+def runParallelAlign(pdb_code_file):
     
     with open(pdb_code_file,'r') as file_in:
         data=json.load(file_in)
@@ -275,11 +275,28 @@ def runAlignBatch(pdb_code_file):
         
     with open('pre_lim4.json', 'w') as file_:
           file_.write(json.dumps(results.copy()))
-                
+          
+def paralleliseAlignment(pdb_pairs):
+    print('Parellelising alignment')
+    results = Manager().dict()
+    with Pool() as pool:
+        for (key,p_value) in pool.map_async(calculatePvalue,pdb_pairs,chunksize=50):
+            results['{}_{}_{}_{}'.format(*key)]=p_value
+
+    return results.copy()
+        
+
+def my_decorator(func):
+    def wrapper():
+        print("Something is happening before the function is called.")
+        func()
+        print("Something is happening after the function is called.")
+    return wrapper
+      
 
 if __name__ == "__main__":
     #try:
-    runAlignBatch(sys.argv[1])
+    runParallelAlign(sys.argv[1])
     #except:
     #    print('wrong args')
         

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3                                          
+#!/usr/bin/env python3
 import sys
 import os
 
@@ -145,7 +145,7 @@ def makePmatrix(pdbs,inter1a,inter1b,inter2a,inter2b,write=True):
                 
 def generateAssistiveFiles(pdbs,write_intermediates=False):
     needleAlign(*pdbs,needle_EXEC='/rscratch/asl47/needle')
-    
+
     type1=makeTypes(pdbs[0])
     type2=makeTypes(pdbs[2])
     (seq1,seq2),align=readNeedle(pdbs)
@@ -279,8 +279,8 @@ def runParallelAlign(pdb_code_file):
 def paralleliseAlignment(pdb_pairs):
     print('Parellelising alignment')
     results = Manager().dict()
-    with Pool() as pool:
-        for (key,p_value) in pool.map_async(calculatePvalue,pdb_pairs,chunksize=50):
+    with Pool(4) as pool:
+        for (key,p_value) in pool.map(calculatePvalue,pdb_pairs,chunksize=50):
             results['{}_{}_{}_{}'.format(*key)]=p_value
 
     return results.copy()

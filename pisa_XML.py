@@ -20,7 +20,7 @@ def pullXML(pdb_code_file):
     with open(pdb_code_file) as file_in:
         for line in file_in:
             pdbs.extend(line.split(', '))
-    print('Loaded PDB files')
+    print('Loaded PDB files, there were {} codes'.format(len(pdbs)))
     #    data=json.load(file_in)
     #    for pairing in data.values():
     #        for pair in pairing:
@@ -35,7 +35,7 @@ def pullXML(pdb_code_file):
         with urllib.request.urlopen(url) as response, open(BASE_PATH+'XML/XML_temp.xml', 'wb') as out_file:
             shutil.copyfileobj(response, out_file)
         splitXML(BASE_PATH+'XML/XML_temp.xml')
-        print('Split chunk {}'.format(slice_))
+        print('Split chunk {} into XML_temp.xml'.format(slice_))
 
     print('Cleaning temporary files')
     os.remove(BASE_PATH+'XML/XML_temp.xml')
@@ -95,6 +95,7 @@ def parseXML(xml_list):
     if isinstance(xml_list, str):
         with open(xml_list,'r') as file_:
             xml_list=file_.readline().rstrip().split(', ')
+
     for pdb_entry in xml_list:
         pdb_entry=pdb_entry.upper()
         print('Parsing entry '+pdb_entry)

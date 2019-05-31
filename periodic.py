@@ -1,6 +1,6 @@
 import pandas
 from domains import readDomains, invertDomains
-from SubSeA import paralleliseAlignment
+from SubSeA import paralleliseAlignment, calculatePvalue
 
 def readHeteromers(file_path='~/Downloads/PeriodicTable.csv'):
     return pandas.read_csv(file_path)
@@ -23,7 +23,7 @@ def linkedProteinGenerator(df):
 
     result_rows = []
 
-    i=0
+    #i=0
     for _, row in df.iterrows():
         pdb = row['PDB ID']
 
@@ -65,7 +65,7 @@ def linkedProteinGenerator(df):
                     #    continue
                     if tuple(domains[edge]) in inverted_homodimer_domains:
                         for comp in inverted_homodimer_domains[tuple(domains[edge])]:
-                            i+=1
+                            #i+=1
                             if i>100:
                                 return
                             yield (pdb + '_' + edge, '{}_{}'.format(*comp.split('_')))
@@ -134,8 +134,12 @@ def chainMap():
 
 import json        
 if __name__ == "__main__":
-    df = scrapePDBs(readHeteromers)
+    df =readHeteromers()
     gener = linkedProteinGenerator(df)
-    dic = paralleliseAlignment(gener)
+    dic = {}
+    for pdb in gener:
+        results = calculatePvalue(pdb)
+        dic['{}_{}_{}_{}'.format(*results[0])] = results[1]
+    #dic = paralleliseAlignment(gener)
     with open('first_run.dict','w') as f_out:
         json.dump(dic,f_out)

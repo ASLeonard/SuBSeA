@@ -138,7 +138,10 @@ if __name__ == "__main__":
     gener = linkedProteinGenerator(df)
     dic = {}
     for pdb in gener:
-        results = calculatePvalue(pdb)
+        try:
+            results = calculatePvalue(pdb)
+        except Exception as err:
+            print('Error on {}'.format(pdb),err)
         dic['{}_{}_{}_{}'.format(*results[0])] = results[1]
     #dic = paralleliseAlignment(gener)
     with open('first_run.dict','w') as f_out:

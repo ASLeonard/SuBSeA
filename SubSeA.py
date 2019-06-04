@@ -17,19 +17,24 @@ import json
 BASE_PATH='/scratch/asl47/PDB/'
 
 def pullFASTA(pdb,chain):
-    lines = requests.get('http://www.ebi.ac.uk/pdbe/entry/pdb/{}/fasta'.format(pdb)).text.split('\n')
+    lines = requests.get('http://www.ebi.ac.uk/pdbe/entry/pdb/{}/fasta'.format(pdb),timeout=1).text.split('\n')
     for idx in range(0,len(lines),2):
         if chain in lines[idx][lines[idx].rfind('|')+1:]:
             with open(BASE_PATH+'FASTA/{}_{}.fasta.txt'.format(pdb,chain),'w') as file_:
                 file_.write('>{}_{}\n'.format(pdb,chain)+lines[idx+1])
                 return
+
+
     
 ##run needle alignment on two pbd_chain inputs
 def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
     for pdb, chain in ((pdb_1,chain_1),(pdb_2,chain_2)):
+        if os.path.exists('{2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH):
+            continue
+
         ##see if fasta info is in given file
         try:
-            subprocess.run('grep -i {0}_{1} -A1 all_fasta.txt > {2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH),shell=True,check=True,stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run('grep -i {0}_{1} -A1 {2}FASTA/all_fasta.txt > {2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH),shell=True,check=True,stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
             pullFASTA(pdb,chain)
 
@@ -233,6 +238,8 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
     val_matrix=pmatrix[1:,1:].copy()
 
     def findMinElements(tm,mins=[]):
+        if len(mins)>1000:
+            raise Exception('Recursed a lot of times, probably wrong')
         if np.min(tm) <= 1:
             ri,ci = divmod(np.argmin(tm),tm.shape[1])
             mins.append(tm[ri,ci])

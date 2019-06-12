@@ -29,7 +29,7 @@ def pullFASTA(pdb,chain):
 ##run needle alignment on two pbd_chain inputs
 def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
     for pdb, chain in ((pdb_1,chain_1),(pdb_2,chain_2)):
-        if os.path.exists('{2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH):
+        if os.path.exists('{2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH)):
             continue
 
         ##see if fasta info is in given file
@@ -264,8 +264,11 @@ from multiprocessing import Pool,Manager
 def calculatePvalue(pdb_combination):
     (het,hom) = pdb_combination
     args=(het[:4].upper(),het[5],hom[:4].upper(),hom[5])
-    n_r, m_r = generateAssistiveFiles(args)
-    return (args,MatAlign(*args,needle_result=n_r,matrix_result=m_r))
+    try:
+        n_r, m_r = generateAssistiveFiles(args)
+        return (args,MatAlign(*args,needle_result=n_r,matrix_result=m_r))
+    except:
+        return (args, 'error')
     
 def runParallelAlign(pdb_code_file):
     
@@ -286,8 +289,9 @@ def runParallelAlign(pdb_code_file):
 def paralleliseAlignment(pdb_pairs):
     print('Parellelising alignment')
     results = Manager().dict()
-    with Pool(4) as pool:
-        for (key,p_value) in pool.map(calculatePvalue,pdb_pairs,chunksize=50):
+    with Pool() as pool:
+        for (key,p_value) in pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50):
+            #print(key)
             results['{}_{}_{}_{}'.format(*key)]=p_value
 
     return results.copy()

@@ -157,4 +157,17 @@ def correspondingHomodimers(heteromerics, homomerics):
                 
      return non_trivial
 
-          
+
+def loadDict(run):
+     return json.load(open('full_run_{}.dict'.format(run),'r'))
+
+def plotData(data):
+     clean_data = np.log10(list(filter(lambda x: isinstance(x,float),data.values())))
+     f,ax = plt.subplots()
+     
+     ax.hist(clean_data,range=(-20,0),bins=300)
+     ax.set_yscale('log')
+     ax.axvline(np.log10(.05),c='r',ls='--',lw=2)
+     
+     plt.show(block=False)
+     

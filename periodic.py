@@ -2,6 +2,8 @@ import pandas
 from domains import readDomains, invertDomains
 from SubSeA import paralleliseAlignment, calculatePvalue
 from numpy.random import randint
+import sys
+
 
 def readHeteromers(file_path='~/Downloads/PeriodicTable.csv'):
     return pandas.read_csv(file_path)
@@ -25,6 +27,7 @@ def linkedProteinGenerator(df):
     result_rows = []
 
     #i=0
+    i_count=0   
     for _, row in df.iterrows():
         pdb = row['PDB ID']
 
@@ -38,18 +41,18 @@ def linkedProteinGenerator(df):
         if not domains:
             continue
         
-        interactions=[pair for pair, active in zip(row[key_interfaces].split(','),row[key_reduced].split(',')) if active == '1']
+        interactions={edge for pair, active in zip(row[key_interfaces].split(','),row[key_reduced].split(',')) if active == '1' for edge in pair.split('-')}
 
-        
-                    
+
         for i,pair in enumerate(interactions):
-            e1, e2 = pair.split('-')
+            #e1, e2 = pair.split('-')
 
             ##heteromeric interaction
-            if e1 != e2:
+            if True or e1 != e2:
                 domain_overlap = 1 ##need to implement
                 
-                for edge in (e1, e2):
+                for edge in (pair,):#(e1, e2):
+
 
                     ##relabel domain
                     if pdb in chain_map and edge in chain_map[pdb]:
@@ -66,9 +69,9 @@ def linkedProteinGenerator(df):
                     #    continue
                     if tuple(domains[edge]) in inverted_homodimer_domains:
                         for comp in inverted_homodimer_domains[tuple(domains[edge])]:
-                            #i+=1
-                            if i>100:
-                                return
+                            #i_count+=1
+                            #if i_count > 1000:
+                            #    return
                             yield (pdb + '_' + edge, '{}_{}'.format(*comp.split('_')))
                         
     return
@@ -184,17 +187,35 @@ def chainMap():
 
     return pfam
 
-import json        
-if __name__ == "__main__":
+import json
+
+def main():
     df =readHeteromers()
     gener = linkedProteinGenerator(df)
+    #print("LEN",sum(1 for _ in gener))
+    #gener = linkedProteinGenerator(df)
     dic = {}
-    for pdb in gener:
-        try:
-            results = calculatePvalue(pdb)
-        except Exception as err:
-            print('Error on {}'.format(pdb),err)
-        dic['{}_{}_{}_{}'.format(*results[0])] = results[1]
-    #dic = paralleliseAlignment(gener)
-    with open('first_run.dict','w') as f_out:
+    
+    if len(sys.argv) == 1:
+        print('Running sequentially')
+        for i,pdb in enumerate(gener):
+            #print(i)
+            #print('On pdb ',pdb)
+            #if i % 500 == 0:
+            #    print('Now on',i)
+            try:
+                results = calculatePvalue(pdb)
+            except Exception as err:
+                print('Error on {}'.format(pdb),err)
+
+            dic['{}_{}_{}_{}'.format(*results[0])] = results[1]
+    else:
+        dic = paralleliseAlignment(gener)
+
+    with open('full_run_2.dict','w') as f_out:
         json.dump(dic,f_out)
+        
+if __name__ == "__main__":
+    main()
+
+

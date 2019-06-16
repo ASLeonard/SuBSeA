@@ -29,7 +29,7 @@ def pullFASTA(pdb,chain):
 ##run needle alignment on two pbd_chain inputs
 def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
     for pdb, chain in ((pdb_1,chain_1),(pdb_2,chain_2)):
-        if os.path.exists('{2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH):
+        if os.path.exists('{2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH)):
             continue
 
         ##see if fasta info is in given file

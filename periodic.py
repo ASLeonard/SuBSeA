@@ -1,6 +1,7 @@
 import pandas
 from domains import readDomains, invertDomains
 from SubSeA import paralleliseAlignment, calculatePvalue
+from numpy.random import randint
 
 def readHeteromers(file_path='~/Downloads/PeriodicTable.csv'):
     return pandas.read_csv(file_path)
@@ -71,6 +72,57 @@ def linkedProteinGenerator(df):
                             yield (pdb + '_' + edge, '{}_{}'.format(*comp.split('_')))
                         
     return
+
+def randomProteinSampler(df, N_SAMPLE_LIMIT=100000):
+
+    key_interfaces = 'List of interface types (all identical subunits are given the same code)'
+    key_reduced = 'Interfaces included in the reduced topology (1 - yes; 0 - no)'
+
+    inverted_homodimer_domains = invertDomains(readDomains('HCath'))
+    homodimer_set = [pdb for proteins in inverted_homodimer_domains.values() for pdb in proteins]
+    heterodimer_set = []
+    ALL_domains = readDomains('CATH-B')
+    chain_map = chainMap()
+
+    result_rows = []
+
+    for _, row in df.iterrows():
+        pdb = row['PDB ID']
+        domains = ALL_domains[pdb]
+
+        ##empty domain, no point continuing
+        if not domains:
+            continue
+        
+        interactions=[pair for pair, active in zip(row[key_interfaces].split(','),row[key_reduced].split(',')) if active == '1']
+
+        for i,pair in enumerate(interactions):
+            e1, e2 = pair.split('-')
+
+            ##heteromeric interaction
+            if e1 != e2:
+                domain_overlap = 1 ##need to implement
+                
+                for edge in (e1, e2):
+
+                    ##relabel domain
+                    if pdb in chain_map and edge in chain_map[pdb]:
+                        edge = chain_map[pdb][edge]
+
+                    ##no information on this subunit for domains
+                    if edge not in domains:
+                        continue
+
+                    if tuple(domains[edge]) in inverted_homodimer_domains:
+                        heterodimer_set.append('{}_{}'.format(pdb,edge))
+
+    
+    for hetero_index, homo_index_ in zip(randint(0,len(heterodimer_set),N_SAMPLE_LIMIT),randint(0,len(homodimer_set),N_SAMPLE_LIMIT)):
+        yield (heterodimer_set[hetero_index], homodimer_set[homo_index_])
+    else:
+        return
+
+    
 
 def fnc(d):
     (het,hom) = d

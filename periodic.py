@@ -2,8 +2,10 @@ import pandas
 from domains import readDomains, invertDomains
 from SubSeA import paralleliseAlignment, calculatePvalue
 from numpy.random import randint
+from collections import defaultdict
 import sys
-
+import json
+import argparse
 
 def readHeteromers(file_path='~/Downloads/PeriodicTable.csv'):
     return pandas.read_csv(file_path)
@@ -125,21 +127,8 @@ def randomProteinSampler(df, N_SAMPLE_LIMIT=100000):
     else:
         return
 
-    
+   
 
-def fnc(d):
-    (het,hom) = d
-    args=(het[:4].upper(),het[5],hom[:4].upper(),hom[5])
-    return '{}||{}'.format(args[0],args[2])
-    
-from multiprocessing import Pool
-def qqq(gener):
-    with Pool() as pool:
-        results = pool.map(fnc,gener,50)
-    
-    return sum(1 for _ in results)
-
-from collections import defaultdict
 def chainMap():
     chainmap = defaultdict(dict)
     with open('chain_map.txt','r') as file_:
@@ -148,71 +137,44 @@ def chainMap():
             chainmap[pdb][file_chain] = pdb_chain
     return dict(chainmap)
 
-    fc = open('chain_map.txt')
-    for line in fc:
-        l = line.strip().split('\t')
-        if l[0].upper() not in chainmap:
-            chainmap[l[0].upper()] = {}
-        chainmap[l[0].upper()][l[1]] = l[2]
-
-    chainmapset = set(chainmap.keys())
-    chainset = defaultdict(list)
-    
-    fc2 = open('pdb_chains')
-    for line in fc2:
-        l = line.strip().split('\t')
-        chainset[l[0].upper()].append(set(l[1].split()))
-
-    pfaml = {}
-    fp = open('pdb_pfam_mapping.txt')
-    fp.readline()
-    for line in fp:
-        l = line.strip().split('\t')
-        if l[0] not in pfaml:
-            pfaml[l[0]] = defaultdict(list)
-        if l[0] in chainmap:
-            for i in chainmap[l[0]]:
-                for j in chainset[l[0]]:
-                    if l[1] in j and chainmap[l[0]][i] in j:
-                        pfaml[l[0]][i].append(l[4])
-        else:
-            pfaml[l[0]][l[1]].append(l[4])
-
-    pfam = {}
-    for i in pfaml:
-        if len(pfaml[i]) > 0:
-            pfam[i] = {}
-            for j in pfaml[i]:
-                pfam[i][j] = ';'.join(sorted(list(pfaml[i][j]))) #';'.join(set(list(pfaml[i][j])))
-
-    return pfam
-
-import json
 
 def main():
-    df =readHeteromers()
-    gener = linkedProteinGenerator(df)
-    #print("LEN",sum(1 for _ in gener))
-    #gener = linkedProteinGenerator(df)
-    dic = {}
     
-    if len(sys.argv) == 1:
+
+    parser = argparse.ArgumentParser(description = 'Domain comparison suite')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("-P", "--parallel", action="store_true",dest='exec_style')
+    group.add_argument("-S", "--sequential", action="store_false",dest='exec_style')
+
+    group2 = parser.add_mutually_exclusive_group()
+    group2.add_argument("-D", "--domain", action="store_true",dest='exec_mode')
+    group2.add_argument("-R", "--random", action="store_false",dest='exec_mode')
+    
+    #parser.add_argument('-','--N_samples',default=None, type=int,help='take N random samples')
+    parser.add_argument('-N','--N_samples',default=None, type=int)
+    parser.set_defaults(exec_style=False,exec_mode=True)
+    args = parser.parse_args()
+
+
+    df =readHeteromers()
+
+    proteinGenerator = linkedProteinGenerator(df) if args.exec_mode else randomProteinSampler(df,args.N_samples)
+    
+    
+    if args.exec_style:
+        dic = paralleliseAlignment(proteinGenerator)
+    else:
         print('Running sequentially')
-        for i,pdb in enumerate(gener):
-            #print(i)
-            #print('On pdb ',pdb)
-            #if i % 500 == 0:
-            #    print('Now on',i)
+        dic = {}
+        for pdb in proteinGenerator:
             try:
                 results = calculatePvalue(pdb)
             except Exception as err:
                 print('Error on {}'.format(pdb),err)
 
             dic['{}_{}_{}_{}'.format(*results[0])] = results[1]
-    else:
-        dic = paralleliseAlignment(gener)
-
-    with open('full_run_2.dict','w') as f_out:
+  
+    with open('{}_run_1.dict'.format('domain' if args.exec_mode else 'random'),'w') as f_out:
         json.dump(dic,f_out)
         
 if __name__ == "__main__":

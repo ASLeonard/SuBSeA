@@ -7,7 +7,9 @@ import requests
 from collections import defaultdict, Counter
 import numpy as np
 from itertools import product
-from scipy.stats import linregress, ks_2samp, anderson_ksamp, epps_singleton_2samp, mannwhitneyu
+from scipy.stats import linregress, ks_2samp, anderson_ksamp#,epps_singleton_2samp, mannwhitneyu
+
+from domains import readDomains, domainMatch
 
    
      
@@ -20,54 +22,48 @@ def scrubInput(run_name,local_alignment=True,similarity=True,domain='SCOP'):
 
           
     for result in glob.glob('/scratch/asl47/PDB/results/{}/*.results'.format(run_name)):
-         d={'id':result.split('.')[0].split('/')[-1].lower()}
-         raw=[line.rstrip() for line in open(result)]
+        d={'id':result.split('.')[0].split('/')[-1].lower()}
+        raw=[line.rstrip() for line in open(result)]
           
-         try:
-              d['homomer']=bool(raw[0]=='1')
+        try:
+            d['homomer']=bool(raw[0]=='1')
+            
+            if len(raw)==1:
+                print("Empty ID on {}".format(d['id']))
+                continue
+            d['chains'] = tuple(sorted(raw[1].split()))
+            
+            if any('#' in line for line in raw):
+                homologies=tuple(filter(lambda element: '#' in element,raw))
+                d['homology']=float(homologies[2*local_alignment+similarity].split()[-1][:-1]) 
+                d['H_pred']='yes' if d['homology']>=30 else 'no'
+                
+            if any('Total' in line for line in raw):
+                bsa=tuple(filter(lambda element: 'Total' in element,raw))
+                d['BSA']=((float(bsa[2].split()[-1])+float(bsa[1].split()[-1]))-float(bsa[0].split()[-1]))/2
                    
-              if len(raw)==1:
-                   print("Empty ID on {}".format(d['id']))
-                   continue
-              d['chains'] = tuple(sorted(raw[1].split()))
-              
-              if any('#' in line for line in raw):
-                   homologies=tuple(filter(lambda element: '#' in element,raw))
-                   d['homology']=float(homologies[2*local_alignment+similarity].split()[-1][:-1]) 
-                   d['H_pred']='yes' if d['homology']>=30 else 'no'
+            if d['id'][:4] in domain_dict:
+                d['domain']=domainMatch(domain_dict[d['id'][:4]],*d['chains'])
+                if d['domain']=='full':
+                    d['arch']=domain_dict[d['id'][:4]][d['chains'][0]]
+                else:
+                    d['arch']=None
 
-              if any('Total' in line for line in raw):
-                   bsa=tuple(filter(lambda element: 'Total' in element,raw))
-                   d['BSA']=((float(bsa[2].split()[-1])+float(bsa[1].split()[-1]))-float(bsa[0].split()[-1]))/2
-                   
-              if d['id'][:4] in domain_dict:
-                   d['domain']=domainMatch(domain_dict[d['id'][:4]],*d['chains'])
-                   if d['domain']=='full':
-                        d['arch']=domain_dict[d['id'][:4]][d['chains'][0]]
-                   else:
-                        d['arch']=None
-                        #or d['domain']=='partial':
-
-                        #d['d_group']=any([tuple(domain_dict[d['id'][:4]][c]) in homomer_domains for c in d['chains']])
-                   #elif 'Homodimer' in path:
-                   #     d['d_group']=None
-                   #else:
-                   #     d['d_group']='none'
                    
                         
                         
-              else:
-                   d['domain']='unknown'
-               if any('TM-score' in line for line in raw):
-                   aligns=tuple(filter(lambda element: 'TM-score' in element,raw))
-                   d['TM']=float(aligns[0].split()[1])
-                   d['S_pred']= 'no' if d['TM']<=.2 else 'yes' if d['TM']>=.5 else 'maybe'
+            else:
+                d['domain']='unknown'
+            if any('TM-score' in line for line in raw):
+                aligns=tuple(filter(lambda element: 'TM-score' in element,raw))
+                d['TM']=float(aligns[0].split()[1])
+                d['S_pred']= 'no' if d['TM']<=.2 else 'yes' if d['TM']>=.5 else 'maybe'
                    
-         except Exception as e:
-              print("Exception",e)
-              print("except on ", d['id'], "len ",len(raw))
-              continue
-         rows_list.append(d)
+        except Exception as e:
+            print("Exception",e)
+            print("except on ", d['id'], "len ",len(raw))
+            continue
+        rows_list.append(d)
     return pd.DataFrame(rows_list)
           
 
@@ -115,11 +111,11 @@ def loadLevy():
 def plotLevy(df,plo='BSA'):
     plt.figure()
     if plo == 'BSA':
-         plt.hist(df['BSA'],bins=100)   
-         plt.show(block=False)
-     elif plo == 'Hom':
-         ax = sns.violinplot(x="homol", y="BSA", data=df.loc[df['iden']==0], palette="Set2",  scale="count",inner="quartile",bw=.1)
-         plt.show(block=False)
+        plt.hist(df['BSA'],bins=100)   
+        plt.show(block=False)
+    elif plo == 'Hom':
+        ax = sns.violinplot(x="homol", y="BSA", data=df.loc[df['iden']==0], palette="Set2",  scale="count",inner="quartile",bw=.1)
+        plt.show(block=False)
     data=df.loc[df['iden']==0]
     #return data
     print(np.median(data.loc[data['homol']==1]['BSA']),np.median(data.loc[data['homol']==0]['BSA']))
@@ -138,17 +134,19 @@ def correspondingHomodimers(heteromerics, homomerics):
                    domain_groupings[domain]=([],[])
               else:
                    domain_groupings[domain][idx].append('{}_{}_{}'.format(row['id'][:4],*row['chains']))
-     non_trivial={domains: pdb_pairs for domains,pdb_pairs in domain_groupings.items() if all(pdb_pairs)}
+    non_trivial={domains: pdb_pairs for domains,pdb_pairs in domain_groupings.items() if all(pdb_pairs)}
     with open('domain_groups.json', 'w') as file_:
          file_.write(json.dumps(non_trivial))
                
     return non_trivial
 
-def loadDict(t,run):
-    return json.load(open('{}_run_{}.dict'.format(t,run),'r'))
+def loadDict(t):
+    return json.load(open('{}_comparison.dict'.format(t),'r'))
 
 
 def plotData(datas,ax=None,stat_func=ks_2samp):
+    labels = datas
+    datas = [loadDict(d) for d in labels]
     cleaned_datas = [np.log10(list(filter(lambda x: isinstance(x,float),data.values()))) for data in datas]
 
     main_range=(-10,0)
@@ -157,8 +155,8 @@ def plotData(datas,ax=None,stat_func=ks_2samp):
     if not ax:
          f,ax = plt.subplots()
 
-    for clean_data,(col1,col2) in zip(cleaned_datas,(('royalblue','skyblue'),('orangered','coral'))):
-         counts, bins, _ = ax.hist(clean_data,range=main_range,bins=300,density=True,histtype='step',color=col1)
+    for clean_data,label,(col1,col2) in zip(cleaned_datas,labels,(('royalblue','skyblue'),('orangered','coral'),('g','g'),('m','m'),('k','k'))):
+         counts, bins, _ = ax.hist(clean_data,range=main_range,bins=300,density=True,histtype='step',color=col1,label=label)
          slope_ROI=slice(150,249)
          counts_ROI=np.log10(counts[slope_ROI])
          bins_ROI=(bins[slope_ROI]+bins[slope_ROI.start+1:slope_ROI.stop+1])/2
@@ -174,6 +172,6 @@ def plotData(datas,ax=None,stat_func=ks_2samp):
     ax.axvline(np.log10(.05),c='darkgrey',ls='--',lw=5)
      
     plt.show(block=False)
-    print(stat_func(*cleaned_datas))
+    #print(stat_func(*cleaned_datas))
     return ax
      

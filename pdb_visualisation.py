@@ -149,13 +149,12 @@ def plotData(datas,ax=None,stat_func=ks_2samp):
     datas = [loadDict(d) for d in labels]
     cleaned_datas = [np.log10(list(filter(lambda x: isinstance(x,float),data.values()))) for data in datas]
 
-    main_range=(-10,0)
-   
+    main_range=(-10,0)   
     
     if not ax:
          f,ax = plt.subplots()
 
-    for clean_data,label,(col1,col2) in zip(cleaned_datas,labels,(('royalblue','skyblue'),('orangered','coral'),('g','g'),('m','m'),('k','k'))):
+    for clean_data,label,(col1,col2) in zip(cleaned_datas,label,(('royalblue','skyblue'),('orangered','coral'),('g','g'),('m','m'),('k','k'))):
          counts, bins, _ = ax.hist(clean_data,range=main_range,bins=300,density=True,histtype='step',color=col1,label=label)
          slope_ROI=slice(150,249)
          counts_ROI=np.log10(counts[slope_ROI])

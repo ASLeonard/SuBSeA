@@ -36,11 +36,9 @@ def readDomains(file_name='SCOP'):
 
 
 def getUniqueHomodimerDomains(top_X=None):
-     if top_X is None:
-          return {tuple(v) for vals in readDomains('HCath').values() for v in vals.values()}
-     else:
-          counted_domains=Counter([tuple(v) for vals in readDomains('HCath').values() for v in vals.values()])
-          return {mc[0] for mc in counted_domains.most_common(top_X)}
+     counted_domains=Counter([tuple(v) for vals in readDomains('HCath').values() for v in vals.values()])
+     return counted_domains.most_common(top_X)
+     #return zip(*counted_domains.most_common(top_X))
 
 
 def domainMatch(data,c1,c2):
@@ -66,9 +64,11 @@ def invertDomains(domains,ids=None):
           #     continue
           #elif ids and len(set(tuple(v[chain]) for chain in ids[k])):
           #     continue
+
           arch=tuple(list(v.values())[0])
           inverted[arch].append('{}_{}'.format(k,list(v.keys())[0]))
      return dict(inverted)
+
 if __name__ == "__main__":
     try:
         if len(sys.argv) == 1:

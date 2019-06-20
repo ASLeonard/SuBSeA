@@ -31,7 +31,7 @@ def pullXML(pdb_code_file):
     PER_CALL=40
     print('Downloading XML from EBI')
     for slice_ in range(0,len(pdbs),PER_CALL):
-        url=URL_base+','.join(pdbs[slice_:slice_+PER_CALL])
+        url=URL_base+','.join(map(str.lower,pdbs[slice_:slice_+PER_CALL]))
         with urllib.request.urlopen(url) as response, open(BASE_PATH+'XML/XML_temp.xml', 'wb') as out_file:
             shutil.copyfileobj(response, out_file)
         splitXML(BASE_PATH+'XML/XML_temp.xml')
@@ -133,13 +133,15 @@ def parseXML(xml_list):
 
             ##write interactions to .int file
             with open(BASE_PATH+'INT/{}.int'.format(pdb_entry),'w') as int_file:
+                print('writing to file')
                 for chain,residues in sorted(name.items()):
                     for res_seq,res_name in sorted(residues.items()):
                         int_file.write('{}\t{}\t{}\t'.format(chain,res_seq,res_name) + '\t'.join(inter[chain][res_seq])+'\n')
+        else:
+            print('not okay')
                         
 
-
-if __name__ == "__main__":
+def main():
     try:
         if len(sys.argv) == 1:
             print('Not enough arguments')
@@ -152,10 +154,15 @@ if __name__ == "__main__":
         elif '.xml' in sys.argv[1]:
             splitXML(sys.argv[1])
         elif sys.argv[1] == 'parse':
-            parseXML()
+            parseXML(sys.argv[2])
         elif '.txt' in sys.argv[1]:
             parseXML(sys.argv[1])
         else:
             print('Unknown option')
     except Exception as e:
         print('Something went wrong with this',e)
+
+
+if __name__ == "__main__":
+    main()
+        

@@ -28,17 +28,20 @@ def pullFASTA(pdb,chain):
     
 ##run needle alignment on two pbd_chain inputs
 def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
+    if os.path.exists('{BP}NEEDLE/{0}_{1}_{2}_{3}.needle'.format(pdb_1,chain_1,pdb_2,chain_2,BP=BASE_PATH)):
+        return
     for pdb, chain in ((pdb_1,chain_1),(pdb_2,chain_2)):
         if os.path.exists('{2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH)):
             continue
 
         ##see if fasta info is in given file
         try:
-            subprocess.run('grep -i {0}_{1} -A1 {2}FASTA/all_fasta.txt > {2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH),shell=True,check=True,stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run('grep -i {0}_{1} -A1 {2}FASTA/clean_all_fasta.txt > {2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH),shell=True,check=True,stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
+            print('Pulling FASTA data for {}_{}'.format(pdb,chain))
             pullFASTA(pdb,chain)
 
-    subprocess.run('{EXEC} {BP}FASTA/{0}_{1}.fasta.txt {BP}FASTA/{2}_{3}.fasta.txt -gapopen 10.0 -gapextend 0.5 -outfile {BP}NEEDLE/{0}_{1}_{2}_{3}.needle'.format(pdb_1,chain_1,pdb_2,chain_2,EXEC=needle_EXEC,BP=BASE_PATH),shell=True,stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run('{EXEC} {BP}FASTA/{0}_{1}.fasta.txt {BP}FASTA/{2}_{3}.fasta.txt -gapopen 10.0 -gapextend 0.5 -outfile {BP}NEEDLE/{0}_{1}_{2}_{3}.needle'.format(pdb_1,chain_1,pdb_2,chain_2,EXEC=needle_EXEC,BP=BASE_PATH),shell=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
 def makeTypes(pdb):
     similaritythresh = 2.0
@@ -267,7 +270,8 @@ def calculatePvalue(pdb_combination):
     try:
         n_r, m_r = generateAssistiveFiles(args)
         return (args,MatAlign(*args,needle_result=n_r,matrix_result=m_r))
-    except:
+    except Exception as e:
+        print(het,hom,e)
         return (args, 'error')
     
 def runParallelAlign(pdb_code_file):
@@ -296,14 +300,7 @@ def paralleliseAlignment(pdb_pairs):
 
     return results.copy()
         
-
-def my_decorator(func):
-    def wrapper():
-        print("Something is happening before the function is called.")
-        func()
-        print("Something is happening after the function is called.")
-    return wrapper
-      
+    
 
 if __name__ == "__main__":
     #try:

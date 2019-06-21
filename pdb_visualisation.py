@@ -29,7 +29,7 @@ def scrubInput(run_name,local_alignment=True,similarity=True,domain='SCOP'):
             d['homomer']=bool(raw[0]=='1')
             
             if len(raw)==1:
-                print("Empty ID on {}".format(d['id']))
+                #print("Empty ID on {}".format(d['id']))
                 continue
             d['chains'] = tuple(sorted(raw[1].split()))
             
@@ -154,7 +154,7 @@ def plotData(datas,ax=None,stat_func=ks_2samp):
     if not ax:
          f,ax = plt.subplots()
 
-    for clean_data,label,(col1,col2) in zip(cleaned_datas,label,(('royalblue','skyblue'),('orangered','coral'),('g','g'),('m','m'),('k','k'))):
+    for clean_data,label,(col1,col2) in zip(cleaned_datas,labels,(('royalblue','skyblue'),('orangered','coral'),('g','g'),('m','m'),('k','k'))):
          counts, bins, _ = ax.hist(clean_data,range=main_range,bins=300,density=True,histtype='step',color=col1,label=label)
          slope_ROI=slice(150,249)
          counts_ROI=np.log10(counts[slope_ROI])

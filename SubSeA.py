@@ -31,7 +31,8 @@ def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
     if os.path.exists('{BP}NEEDLE/{0}_{1}_{2}_{3}.needle'.format(pdb_1,chain_1,pdb_2,chain_2,BP=BASE_PATH)):
         return
     for pdb, chain in ((pdb_1,chain_1),(pdb_2,chain_2)):
-        if os.path.exists('{2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH)):
+        file_name = '{2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH)
+        if os.path.exists(file_name) and os.path.getsize(file_name):
             continue
 
         ##see if fasta info is in given file

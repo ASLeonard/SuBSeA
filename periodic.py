@@ -34,6 +34,7 @@ def heteromerHomodimerOverlap(df,periodic=True,H_max=None):
     chain_map = chainMap()
 
     counts,uc = [], []
+    fs=[]
     
     for (unique_archs, unique_counts) in getUniqueHomodimerDomains(H_max):
         if unique_archs not in inverted_homodimer_domains:
@@ -57,10 +58,12 @@ def heteromerHomodimerOverlap(df,periodic=True,H_max=None):
                     continue
                 ##no information on this subunit for domains
                 if edge not in domains:
+                    fs.append('{}_{}'.format(pdb.upper(),edge))
                     continue
             
                 if tuple(domains[edge]) == unique_archs:
                     count+=1
+        return fs
         counts.append(count)
         
     return {'matches':counts,'h_count':uc,'total':total}
@@ -140,7 +143,7 @@ def randomProteinSampler(df, periodic_table=True, N_SAMPLE_LIMIT=100000, REQ_dom
     heteromer_domains = readDomains('CATH-B' if periodic_table else 'CATH')
     homodimer_domains = readDomains('HCath')
     inverted_homodimer_domains = invertDomains(homodimer_domains)
-    homodimer_set = [pdb for proteins in inverted_homodimer_domains.values() for pdb in proteins] if REQ_domain_info else list(homodimer_domains.keys())
+    homodimer_set = [pdb for proteins in inverted_homodimer_domains.values() for pdb in proteins]# if REQ_domain_info else list(homodimer_domains.keys())
     heterodimer_set = []
     chain_map = chainMap()
 
@@ -161,16 +164,14 @@ def randomProteinSampler(df, periodic_table=True, N_SAMPLE_LIMIT=100000, REQ_dom
                 edge = chain_map[pdb][edge]
 
             ##no information on this subunit for domains
-            if REQ_domain_info and edge not in domains:
-                continue
-
-            if tuple(domains[edge]) in inverted_homodimer_domains:
-                if N_SAMPLE_LIMIT<=0:
-                    for comp in inverted_homodimer_domains[tuple(domains[edge])]:
-                        yield (pdb + '_' + edge, '{}_{}'.format(*comp.split('_')))
-                else:
-                    heterodimer_set.append('{}_{}'.format(pdb,edge))
-            elif not REQ_domain_info:
+            if REQ_domain_info:
+                if edge in domains and tuple(domains[edge]) in inverted_homodimer_domains:
+                    if N_SAMPLE_LIMIT<=0:
+                        for comp in inverted_homodimer_domains[tuple(domains[edge])]:
+                            yield (pdb + '_' + edge, '{}_{}'.format(*comp.split('_')))
+                    else:
+                        heterodimer_set.append('{}_{}'.format(pdb,edge))
+            else:
                 heterodimer_set.append('{}_{}'.format(pdb,edge))
 
     if N_SAMPLE_LIMIT <= 0:
@@ -205,7 +206,12 @@ def chainMap():
 
 
 def main(args):
-    df = readHeteromers() if args.exec_source else scrubInput('PDB_Heterodimers',0,1,'CATH')
+    if args.exec_source:
+        print('Loading periodic data')
+        df = readHeteromers()
+    else:
+        print('Loading PDB heterodimer data')
+        df = scrubInput('PDB_Heterodimers',0,1,'CATH')
     
         
     random_condition = {0: (False,False), 1: (True,False), 2: (True,True), 3: (False,True)}
@@ -219,12 +225,13 @@ def main(args):
         print('Running sequentially')
         results = {}
         for pdb in proteinGenerator:
-            try:
-                results = calculatePvalue(pdb)
-            except Exception as err:
-                print('Error on {}'.format(pdb),err)
+            #print(pdb)
+            #try:
+            single_result = calculatePvalue(pdb)
+            #except Exception as err:
+            #print('Error on {}'.format(pdb),err)
 
-            results['{}_{}_{}_{}'.format(*results[0])] = results[1]
+            results['{}_{}_{}_{}'.format(*single_result[0])] = single_result[1]
   
     with open('{}_{}_comparison.dict'.format('Table' if args.exec_source else 'PDB', args.file_name or ('domain_match' if args.exec_mode else 'random')),'w') as f_out:
         json.dump(results,f_out)
@@ -255,6 +262,10 @@ if __name__ == "__main__":
     if args.exec_mode:
         args.N_samples = -1
         args.R_mode = 1
+    elif not args.N_samples:
+        print('Random sampling amount defaulted to 10,000')
+        args.N_samples = 10000
+        
 
     if args.R_mode == -1:
         args.R_mode = 0

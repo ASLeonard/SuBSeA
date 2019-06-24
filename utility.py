@@ -15,7 +15,6 @@ def formatFASTA(fname,out_name=None):
             elif pdb:
                 sequence += line.rstrip()
 
-
 from collections import defaultdict
 
 def chainIt():

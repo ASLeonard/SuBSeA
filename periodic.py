@@ -34,7 +34,7 @@ def heteromerHomodimerOverlap(df,periodic=True,H_max=None):
     chain_map = chainMap()
 
     counts,uc = [], []
-    fs=[]
+    #fs=[]
     
     for (unique_archs, unique_counts) in getUniqueHomodimerDomains(H_max):
         if unique_archs not in inverted_homodimer_domains:
@@ -58,12 +58,12 @@ def heteromerHomodimerOverlap(df,periodic=True,H_max=None):
                     continue
                 ##no information on this subunit for domains
                 if edge not in domains:
-                    fs.append('{}_{}'.format(pdb.upper(),edge))
+                    #fs.append('{}_{}'.format(pdb.upper(),edge))
                     continue
             
                 if tuple(domains[edge]) == unique_archs:
                     count+=1
-        return fs
+        #return fs
         counts.append(count)
         
     return {'matches':counts,'h_count':uc,'total':total}
@@ -81,6 +81,8 @@ def visualiseOverlap(data_in):
     ax1.set_xticks([])
     ax1.set_xlabel(r'$\leftarrow$ most common homodimer domain')
     ax1.set_ylabel('# matched heteromeric subunits')
+    for cut in (.5,.75,.95):
+        ax1.text(np.where(h>cut*np.sum(h))[0][0], 0, str(cut), fontsize=12)
     ax1t = ax1.twinx()
     ax1t.plot(np.cumsum(data_raw['matches'])/data_raw['total'],ls='--')
     ax1t.set_xticks([])
@@ -91,7 +93,7 @@ def visualiseOverlap(data_in):
     c = Counter(data_raw['matches'])
     cols=np.log10([sum(data_raw['h_count'][i] for i,j in enumerate(data_raw['matches']) if j==key) for key in sorted(c.keys())])
     
-    ax2.scatter(sorted(c.keys()),[c[k] for k in sorted(c.keys())],c=cols,cmap='plasma')
+    ax2.scatter(sorted(c.keys()),[c[k] for k in sorted(c.keys())],c=cols,cmap='plasma',edgecolors='k')
     ax2.set_yscale('log')
     ax2.set_xscale('symlog')
     ax2.set_xlabel('# matched heteromeric subunits')

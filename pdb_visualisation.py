@@ -11,8 +11,21 @@ from scipy.stats import linregress, ks_2samp, anderson_ksamp#,epps_singleton_2sa
 
 from domains import readDomains, domainMatch
 
-   
-     
+def makeCSV(df,domain):
+    domain_dict=readDomains(domain)
+
+    new_rows = []
+
+    for _, row in df.iterrows():
+        domain_info = ';'.join([chain+':{}'.format(tuple(domain_dict[row['id'][:4]][chain])) if chain in domain_dict[row['id'][:4]] else '' for chain in row['chains']] )
+        
+        new_rows.append({'PDB_id':row['id'][:4], 'interfaces':'-'.join(sorted(row['chains'])), 'domains':domain_info, 'BSAs':round(row['BSA']) if not pd.isna(row['BSA']) else ''})
+
+    return pd.DataFrame(new_rows)
+
+def writeCSV(df,fname):
+    df.to_csv(fname,index=False,columns=['PDB_id','interfaces','domains','BSAs'])
+
 def scrubInput(run_name,local_alignment=True,similarity=True,domain='SCOP'):
 
     rows_list = []

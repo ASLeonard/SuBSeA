@@ -15,6 +15,32 @@ def formatFASTA(fname,out_name=None):
             elif pdb:
                 sequence += line.rstrip()
 
+import pandas
+
+def mergeSheets():
+
+    interface_KEY = 'List of interface types (I- isologous homomeric; H - heterologous homomeric; T - heteromeric)'
+    interface_LIST = 'List of interface types (all identical subunits are given the same code)'
+    
+    data_heteromers = pandas.read_excel('~/Downloads/PeriodicTable.xlsx',sheet_name=[0,2])
+
+    new_rows = []
+
+    for data in data_heteromers.values():
+        for i, row in data.iterrows():
+            
+            if not pandas.isna(row[interface_KEY]) and any(type_ in row[interface_KEY] for type_ in ('T','I')):
+                all_interfaces = zip(row[interface_LIST].split(','),row[interface_KEY].split(','))
+                meaningful_interfaces = {'-'.join(sorted(interface.split('-'))) for (interface,type_) in all_interfaces if (type_ != 'H' and interface[0] != interface[2])}
+
+                if not meaningful_interfaces:
+                    continue
+                
+                new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces})
+
+    return pandas.DataFrame(new_rows)
+    
+
 from collections import defaultdict
 
 def chainIt():

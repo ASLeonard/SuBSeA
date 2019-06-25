@@ -22,7 +22,8 @@ def pullFASTA(pdb,chain):
         if chain in lines[idx][lines[idx].rfind('|')+1:]:
             with open(BASE_PATH+'FASTA/{}_{}.fasta.txt'.format(pdb,chain),'w') as file_:
                 file_.write('>{}_{}\n'.format(pdb,chain)+lines[idx+1])
-                return
+                return True
+    return False
 
 
     

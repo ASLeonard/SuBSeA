@@ -16,34 +16,114 @@ def formatFASTA(fname,out_name=None):
                 sequence += line.rstrip()
 
 import pandas
+from statistics import mean
+from domains import readDomains
+
+def getBadIDs(dx=None,raw_table=None):
+    if raw_table is None:
+        raw_table  = pandas.read_csv('Periodic_heteromers3.csv',index_col=False)
+    if not dx:
+        ps = list(raw_table['PDB_id'])
+        lx= [] 
+        for line in open('/scratch/asl47/PDB/FASTA/cleaned2_all_fasta.txt','r'):
+            if '>' in line and line.rstrip()[1:5].lower() in ps:
+                lx.append(line.rstrip()[1:])
+
+        dx = defaultdict(list)
+        for ix in lx:
+            dx[ix[:4].lower()].append(ix[-1])
+        return dx
+    
+    bad_s=[]
+
+    #raw_table  = pandas.read_csv('Periodic_heteromers3.csv',index_col=False)
+    for _,row in raw_table.iterrows():
+        #row['interfaces'] = eval(row['interfaces'].values[0])
+        #row['interfaces'] = {i for i in row['interfaces'][2:-2].split('\', \'')}
+        interfaces = {chain for interaction in row['interfaces'] for chain in interaction.split('-')}
+        for inx in interfaces:
+            if inx not in dx[row['PDB_id']]:
+                bad_s.append('{}_{}'.format(row['PDB_id'],inx))
+    return bad_s
+
+def nextWave(bads):
+    super_bad = []
+    for bad in bads:
+        if not fullFASTA('/scratch/asl47/PDB/FASTA/{}.fasta.txt'.format(bad.upper())):
+            pullFASTA(*bad.split('_'))
+            if not fullFASTA('/scratch/asl47/PDB/FASTA/{}.fasta.txt'.format(bad.upper())):
+                super_bad.append(bad)
+    return super_bad
+                
+        
 
 def mergeSheets():
 
     interface_KEY = 'List of interface types (I- isologous homomeric; H - heterologous homomeric; T - heteromeric)'
     interface_LIST = 'List of interface types (all identical subunits are given the same code)'
-    
+    interface_BSA= 'List of interface sizes (Angstroms^2)'
+
+    assembly_SYM = 'Symmetry group (M - monomer; Dna - dihedral with heterologous interfaces; Dns - dihedral with only isologous interfaces; Ts - tetrahedral with isologous interfaces; Ta - tetrahedral with only heterologous interfaces; O* - 4 different octahedral topologies)'
     data_heteromers = pandas.read_excel('~/Downloads/PeriodicTable.xlsx',sheet_name=[0,2])
 
+    domain_dict=readDomains('periodic')
+    chain_map = chainMap()
+    chain_mapE = chainMap('Extra')
     new_rows = []
 
     for data in data_heteromers.values():
         for i, row in data.iterrows():
+            PDB_code = row['PDB ID']
+            if assembly_SYM in row and row[assembly_SYM] == 'M':
+                continue
+            
             
             if not pandas.isna(row[interface_KEY]) and any(type_ in row[interface_KEY] for type_ in ('T','I')):
+
+                if PDB_code in chain_map:
+                    for swaps in chain_map[PDB_code].items():
+                        row[interface_LIST] = row[interface_LIST].replace(*swaps)
+                if PDB_code in chain_mapE:
+                    for swaps in chain_mapE[PDB_code].items():
+                        row[interface_LIST] = row[interface_LIST].replace(*swaps)
                 all_interfaces = zip(row[interface_LIST].split(','),row[interface_KEY].split(','))
+                
+                
                 meaningful_interfaces = {'-'.join(sorted(interface.split('-'))) for (interface,type_) in all_interfaces if (type_ != 'H' and interface[0] != interface[2])}
 
                 if not meaningful_interfaces:
                     continue
+
+                BSAs = defaultdict(list)
+                if not isinstance(row[interface_BSA],str):
+                    row[interface_BSA] = str(row[interface_BSA])
+                for K,V in zip(('-'.join(sorted(interface.split('-'))) for interface in row[interface_LIST].split(',')),row[interface_BSA].split(',')):
+                    BSAs[K].append(float(V))
+
+                BSA_av = {K:mean(V) for K,V in BSAs.items()}
+
+                domain_info = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
                 
-                new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces})
+                
+                new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info, 'BSAs':','.join(map(str,[BSA_av[K] for K in meaningful_interfaces]))})
 
     return pandas.DataFrame(new_rows)
-    
+
+
+def chainMap(extra=None):
+    chainmap = defaultdict(dict)
+    with open('chain_map{}.txt'.format(extra or ''),'r') as file_:
+        for line in file_:
+            (pdb, file_chain, pdb_chain) = line.rstrip().split('\t')
+            chainmap[pdb][file_chain] = pdb_chain
+    return dict(chainmap)
 
 from collections import defaultdict
+def fullFASTA(file_name):
+    return os.path.exists(file_name) and os.path.getsize(file_name)
 
-def chainIt():
+
+def chainFull():
     chainmap = {}
     fc = open('chain_map.txt')
     for line in fc:
@@ -59,6 +139,7 @@ def chainIt():
     for line in fc2:
         l = line.strip().split('\t')
         chainset[l[0].upper()].append(set(l[1].split()))
+    #return chainset
         
     pfaml = {}
     fp = open('pdb_pfam_mapping.txt')
@@ -82,3 +163,35 @@ def chainIt():
             for j in pfaml[i]:
                 pfam[i][j] = ';'.join(sorted(list(pfaml[i][j])))
     return chainmap,chainmapset,pfaml,pfam
+
+
+def fixEm(pchains,fixables,df):
+    rev_map=defaultdict(dict)
+    for fix in fixables:
+        inters = eval(df.loc[df['PDB_id']==fix[:4]]['interfaces'].values[0])
+        #print(inters)
+        #return
+        pch = pchains[fix[:4].upper()]
+        pch = [i for j in  pch for i in j]
+        inters2= [i for j in inters for i in j.split('-')]
+        #print(pch,inters2)
+        if len(inters2) == 2 and len(pch)==2:
+            #return fix
+            #dif1 = set(inters2)-set(pch)
+            #dif2 = set(pch) - set(inters2)
+            #if len(dif1) == 1 and len(dif2) ==1:
+            #    return fix
+            for i in range(2):
+                rev_map[fix[:4]][inters2[i]] = pch[i]
+            #rev_map[fix[:4]][inters2]=list(pch[0])[0]
+            #rev_map[fix[:4]][inters[inters.index('-')+1]]=list(pch[1])[0]
+    return rev_map
+
+def wrFE(rm):
+    #rev_map[fix[:4]][inters[inters.index('-')-1]]=list(pch[0])[0]
+    tw= ''
+    for pdb, maps in rm.items():
+        
+        for A,B in maps.items():
+            tw+='\t'.join((pdb,A,B))+'\n'
+    return tw

@@ -18,16 +18,16 @@ def pullDomains(pdb_id, style_key='CATH-B'):
                domain_arch[chain_element['chain_id']].append(class_id)
      return dict(domain_arch)
 
-def writeDomains(pdb_list,class_type='SCOP'):
+def writeDomains(pdb_list,class_type='SCOP',fname=None):
     if isinstance(pdb_list, str):
         with open(pdb_list,'r') as file_:
             pdb_list=file_.readline().rstrip().split(', ')
     ##pull domain information from EBI for all PDBs
     print('Pulling domains')
-    domains={pdb: pullDomains(pdb,class_type) for pdb in pdb_list}
+    domains={pdb.lower(): pullDomains(pdb.lower(),class_type) for pdb in pdb_list}
 
     ##write to json file
-    with open('domain_architectures_{}.json'.format(class_type), 'w') as file_out:
+    with open(fname or 'domain_architectures_{}.json'.format(class_type), 'w') as file_out:
         file_out.write(json.dumps(domains))
 
 def readDomains(file_name='SCOP'):
@@ -75,6 +75,6 @@ if __name__ == "__main__":
             print('Not enough arguments')
         elif '.txt' in sys.argv[1]:
             print('About to pull domains')
-            writeDomains(sys.argv[1],'CATH-B')
+            writeDomains(sys.argv[1],'CATH-B',sys.argv[2])
     except Exception as e:
         print('err',e)

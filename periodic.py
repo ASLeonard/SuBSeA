@@ -2,6 +2,7 @@
 from domains import readDomains, invertDomains, getUniqueHomodimerDomains
 from SubSeA import paralleliseAlignment, calculatePvalue
 from pdb_visualisation import scrubInput
+from utility import loadCSV, invertCSVDomains
 
 ##global imports
 import pandas
@@ -101,102 +102,70 @@ def visualiseOverlap(data_in):
     plt.show(block=False)
     
 
-def linkedProteinGenerator(df):
-    key_interfaces = 'List of interface types (all identical subunits are given the same code)'
-    key_reduced = 'Interfaces included in the reduced topology (1 - yes; 0 - no)'
-
-    inverted_homodimer_domains = invertDomains(readDomains('HCath'))
-    ALL_domains = readDomains('CATH-B')
-    chain_map = chainMap()
-
-
-    for _, row in df.iterrows():
-        pdb = row['PDB ID']
-        domains = ALL_domains[pdb]
-
-        ##empty domain, no point continuing
-        if not domains:
-            continue
-
-        ##get all subunits in heteromeric interactions and are in reduced topology
-        interactions={edge for pair, active in zip(row[key_interfaces].split(','),row[key_reduced].split(',')) if (pair[0]!=pair[2] and active == '1') for edge in pair.split('-') }
-
-        for edge in interactions:
-            ##relabel domains if needed
-            if pdb in chain_map and edge in chain_map[pdb]:
-                edge = chain_map[pdb][edge]
-                
-            ##no information on this subunit for domains
-            if edge not in domains:
-                continue
-
-            if tuple(domains[edge]) in inverted_homodimer_domains:
-                for comp in inverted_homodimer_domains[tuple(domains[edge])]:
-                    yield (pdb + '_' + edge, '{}_{}'.format(*comp.split('_')))
-                        
-    return
-
 def randomProteinSampler(df, periodic_table=True, N_SAMPLE_LIMIT=100000, REQ_domain_info=True, ENFORCE_nonmatch=False):
-
-    key_interfaces = 'List of interface types (all identical subunits are given the same code)'
-    key_reduced = 'Interfaces included in the reduced topology (1 - yes; 0 - no)'
-
+    domain_mode='enforce'
+   
+    homodimer_table = loadCSV('PDB_homodimers.csv')
+    inverted_homodimer_domains = invertCSVDomains(homodimer_table)
+    homodimer_set = list('{}_{}'.format(p,list(c)[0]) for p,c in zip(homodimer_table['PDB_id'],homodimer_table['interfaces'])) 
+    heterodimer_set = list('{}_{}'.format(p,j) for p,c in zip(df['PDB_id'],df['interfaces']) for i in c for j in i.split('-'))
+    #return heterodimer_set
     
-    heteromer_domains = readDomains('CATH-B' if periodic_table else 'CATH')
-    homodimer_domains = readDomains('HCath')
-    inverted_homodimer_domains = invertDomains(homodimer_domains)
-    homodimer_set = [pdb for proteins in inverted_homodimer_domains.values() for pdb in proteins]# if REQ_domain_info else list(homodimer_domains.keys())
-    heterodimer_set = []
-    chain_map = chainMap()
-
-    
+    yielded_samples = 0
+    heteromer_anti_domains = {}
+    heteromer_domains = {}
     for _, row in df.iterrows():
-        pdb = row['PDB ID'] if periodic_table else row['id'][:4]
-        domains = heteromer_domains[pdb]
+        pdb = row['PDB_id']
+        domains = row['domains']
 
         ##empty domain, no point continuing
         if REQ_domain_info and not domains:
             continue
 
-        interactions={edge for pair, active in zip(row[key_interfaces].split(','),row[key_reduced].split(',')) if (pair[0]!=pair[2] and active == '1') for edge in pair.split('-')} if periodic_table else row['chains']
-        
-        for edge in interactions:
-            ##relabel domain
-            if pdb in chain_map and edge in chain_map[pdb]:
-                edge = chain_map[pdb][edge]
+        interactions = row['interfaces']
+        flat_chains = {chain for interaction in interactions for chain in interaction.split('-')}
 
-            ##no information on this subunit for domains
-            if REQ_domain_info:
-                if edge in domains and tuple(domains[edge]) in inverted_homodimer_domains:
-                    if N_SAMPLE_LIMIT<=0:
-                        for comp in inverted_homodimer_domains[tuple(domains[edge])]:
-                            yield (pdb + '_' + edge, '{}_{}'.format(*comp.split('_')))
-                    else:
-                        heterodimer_set.append('{}_{}'.format(pdb,edge))
-            else:
-                heterodimer_set.append('{}_{}'.format(pdb,edge))
+        anti_domains = defaultdict(set)
+        for chain in flat_chains:
+            for interaction in interactions:
+                if chain in interaction:
+                    for edge in interaction.split('-'):
+                        if edge in domains:
+                            #heteromer_domains[pdb]
+                            anti_domains[chain].add(domains[edge])
+        anti_domains = dict(anti_domains)
+        heteromer_anti_domains[pdb] = anti_domains
 
-    if N_SAMPLE_LIMIT <= 0:
+        if domain_mode == 'match':
+            for chain in flat_chains:
+                ##no information on this subunit for domains
+                if REQ_domain_info and chain in domains and domains[chain] in inverted_homodimer_domains:
+                    for comp in inverted_homodimer_domains[domains[chain]]:
+                        yield (pdb + '_' + chain, '{}_{}'.format(*comp.split('_')))
+                        yielded_samples += 1
+                        if N_SAMPLE_LIMIT > 0 and yielded_samples > N_SAMPLE_LIMIT:
+                            return
+
+
+    if domain_mode == 'match':
         return
-    elif ENFORCE_nonmatch:
-        yield_count = 0
-        while yield_count <= N_SAMPLE_LIMIT:
+    elif domain_mode == 'enforce':
+        while yielded_samples <= N_SAMPLE_LIMIT:
             het_option = choice(heterodimer_set)
             hom_option = choice(homodimer_set)
-            while het_option[-1] in heteromer_domains[het_option[:4]] and hom_option[-1] in homodimer_domains[hom_option[:4]] and heteromer_domains[het_option[:4]][het_option[-1]] == homodimer_domains[hom_option[:4]][hom_option[-1]]:
-                het_option = choice(heterodimer_set)
-                hom_option = choice(homodimer_set)
+            try:
+                if any(darch in homodimer_table.loc[homodimer_table['PDB_id']==hom_option[:4]]['domains'][hom_option[-1]] for darch in heteromer_anti_domains[het_option[:4]][het_option[-1]]):
+                    continue
+            except KeyError:
+                pass
 
-            yield_count += 1
             yield (het_option, hom_option)
-            
-    else:
+            yielded_samples += 1
+        return
+    else: #random domain_mode
         for hetero_index, homo_index_ in zip(randint(0,len(heterodimer_set),N_SAMPLE_LIMIT),randint(0,len(homodimer_set),N_SAMPLE_LIMIT)):
             yield (heterodimer_set[hetero_index], homodimer_set[homo_index_])
-    
-    return
-
-   
+        return  
 
 def chainMap():
     chainmap = defaultdict(dict)
@@ -210,7 +179,7 @@ def chainMap():
 def main(args):
     if args.exec_source:
         print('Loading periodic data')
-        df = readHeteromers()
+        df = loadCSV('Periodic_heteromers_CC.csv')#readHeteromers()
     else:
         print('Loading PDB heterodimer data')
         df = scrubInput('PDB_Heterodimers',0,1,'CATH')

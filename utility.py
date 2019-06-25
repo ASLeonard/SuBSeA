@@ -15,6 +15,40 @@ def formatFASTA(fname,out_name=None):
             elif pdb:
                 sequence += line.rstrip()
 
+
+def loadCSV(fname):
+    df = pandas.read_csv(fname,index_col=False)
+    #return df
+    for index,row in df.iterrows():
+        #row['BSAs']
+        #print(row['PDB_id'])
+
+        interfaces = row['interfaces']
+        if isinstance(interfaces,str):
+            if '{' in interfaces:
+                row['interfaces'] = eval(interfaces)
+            else:
+                row['interfaces'] = set(interfaces.split('-'))
+        else:
+            row['interfaces'] = eval(row['interfaces'].values[0])
+        #print(type(row['domains']))
+        if ';' in row['domains']:
+            row['domains'] = {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in row['domains'].split(';') if len(dom)>1}
+        else:
+            row['domains'] = eval(row['domains'])
+        #print('D')
+        df.iloc[index] = row
+    return df
+
+from domains import invertDomains
+
+def invertCSVDomains(df):
+    dom_dict = {}
+    for _,row in df.iterrows():
+        if row['domains'] is not None:
+            dom_dict[row['PDB_id']] = row['domains']
+    return invertDomains(dom_dict)
+        
 import pandas
 from statistics import mean
 from domains import readDomains
@@ -100,7 +134,7 @@ def mergeSheets():
                 for K,V in zip(('-'.join(sorted(interface.split('-'))) for interface in row[interface_LIST].split(',')),row[interface_BSA].split(',')):
                     BSAs[K].append(float(V))
 
-                BSA_av = {K:mean(V) for K,V in BSAs.items()}
+                BSA_av = {K:round(mean(V)) for K,V in BSAs.items()}
 
                 domain_info = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
                 

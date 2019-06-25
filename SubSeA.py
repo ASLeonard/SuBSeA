@@ -41,7 +41,8 @@ def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
             subprocess.run('grep -i {0}_{1} -A1 {2}FASTA/clean_all_fasta.txt > {2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH),shell=True,check=True,stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
             print('Pulling FASTA data for {}_{}'.format(pdb,chain))
-            pullFASTA(pdb,chain)
+            if not pullFASTA(pdb,chain):
+                raise ValueError('Chain does not seem to exist for {}_{}'.format(pdb,chain))
 
     subprocess.run('{EXEC} {BP}FASTA/{0}_{1}.fasta.txt {BP}FASTA/{2}_{3}.fasta.txt -gapopen 10.0 -gapextend 0.5 -outfile {BP}NEEDLE/{0}_{1}_{2}_{3}.needle'.format(pdb_1,chain_1,pdb_2,chain_2,EXEC=needle_EXEC,BP=BASE_PATH),shell=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 

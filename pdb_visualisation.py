@@ -160,25 +160,34 @@ def loadDict(t):
 def plotData(datas,ax=None,stat_func=ks_2samp):
     labels = datas
     datas = [loadDict(d) for d in labels]
-    cleaned_datas = [np.log10(list(filter(lambda x: isinstance(x,float),data.values()))) for data in datas]
+    if True:
+        cleaned_datas = [np.log10([val or 1 for val in data.values() if val!='error']) for data in datas]
+    else:
+        cleaned_datas = [np.log10(list(filter(lambda x: isinstance(x,float),data.values()))) for data in datas]
+    #
 
     main_range=(-10,0)   
     
     if not ax:
-         f,ax = plt.subplots()
+        f,ax = plt.subplots()
+
+    def logSlope(counts,bins):
+        slope_ROI=slice(round(.5*len(counts)),round(.85*(len(counts))))
+        counts_ROI=np.log10(counts[slope_ROI])
+        bins_ROI=(bins[slope_ROI]+bins[slope_ROI.start+1:slope_ROI.stop+1])/2
+        y,b=linregress(bins_ROI,counts_ROI)[:2]
+        print('Slope: ',y)
+        ax.plot(bins[slope_ROI],10**(bins[slope_ROI]*y+b),ls='--',lw=3,c=col2)
 
     for clean_data,label,(col1,col2) in zip(cleaned_datas,labels,(('royalblue','skyblue'),('orangered','coral'),('g','g'),('m','m'),('k','k'))):
-         counts, bins, _ = ax.hist(clean_data,range=main_range,bins=300,density=True,histtype='step',color=col1,label=label)
-         slope_ROI=slice(150,249)
-         counts_ROI=np.log10(counts[slope_ROI])
-         bins_ROI=(bins[slope_ROI]+bins[slope_ROI.start+1:slope_ROI.stop+1])/2
-         y,b=linregress(bins_ROI,counts_ROI)[:2]
+        print(len(clean_data), sum(clean_data<np.log10(.05))/len(clean_data))
+        counts, bins, _ = ax.hist(clean_data,range=main_range,bins=100,density=True,histtype='step',color=col1,label=label)
+        logSlope(counts,bins)
+        
+        outlier_low = sum(clean_data<main_range[0])/len(clean_data)
+        ax.bar(bins[0],outlier_low,width=-5*(bins[1]-bins[0]),align='edge',edgecolor='w',hatch='////',facecolor=col1,alpha=0.3)
 
-         outlier_low = sum(clean_data<main_range[0])/len(clean_data)
-         ax.bar(bins[0],outlier_low,width=-5*(bins[1]-bins[0]),align='edge',edgecolor='w',hatch='////',facecolor=col1,alpha=0.3)
-
-         print('Slope:',y)
-         ax.plot(bins[slope_ROI],10**(bins[slope_ROI]*y+b),ls='--',lw=3,c=col2)
+       
           
     ax.set_yscale('log')
     ax.axvline(np.log10(.05),c='darkgrey',ls='--',lw=5)

@@ -20,7 +20,7 @@ def pullXML(pdb_code_file):
     with open(pdb_code_file) as file_in:
         for line in file_in:
             pdbs.extend(line.split(', '))
-    print('Loaded PDB files, there were {} codes'.format(len(pdbs)))
+    print(f'Loaded PDB files, there were {len(pdbs)} codes')
     #    data=json.load(file_in)
     #    for pairing in data.values():
     #        for pair in pairing:
@@ -32,10 +32,10 @@ def pullXML(pdb_code_file):
     print('Downloading XML from EBI')
     for slice_ in range(0,len(pdbs),PER_CALL):
         url=URL_base+','.join(map(str.lower,pdbs[slice_:slice_+PER_CALL]))
-        with urllib.request.urlopen(url) as response, open(BASE_PATH+'XML/XML_temp.xml', 'wb') as out_file:
+        with urllib.request.urlopen(url) as response, open(f'{BASE_PATH}XML/XML_temp.xml', 'wb') as out_file:
             shutil.copyfileobj(response, out_file)
-        splitXML(BASE_PATH+'XML/XML_temp.xml')
-        print('Split chunk {} into XML_temp.xml'.format(slice_))
+        splitXML(f'{BASE_PATH}XML/XML_temp.xml')
+        print('Split chunk {slice_} into XML_temp.xml')
 
     print('Cleaning temporary files')
     os.remove(BASE_PATH+'XML/XML_temp.xml')
@@ -62,7 +62,7 @@ def splitXML(input_file):
                 file_string += line[2:]
                 ##end of entry, write to its own file
                 if '</pdb_entry>' in line:
-                    with open(BASE_PATH+'XML/{}.xml'.format(pdb_name),'w') as out_file:
+                    with open(f'{BASE_PATH}XML/{pdb_name}.xml''w') as out_file:
                         out_file.write(file_string)
                     file_string=''
 
@@ -98,11 +98,11 @@ def parseXML(xml_list):
 
     for pdb_entry in xml_list:
         pdb_entry=pdb_entry.upper()
-        print('Parsing entry '+pdb_entry)
+        print(f'Parsing entry {pdb_entry}')
 
         ##load tree in xml_format and convert recursively to dicts
         try:
-            tree = ET.parse(BASE_PATH+'XML/{}.xml'.format(pdb_entry))
+            tree = ET.parse(f'{BASE_PATH}XML/{pdb_entry}.xml')
         except FileNotFoundError:
             print('Missing XML data on '+pdb_entry)
             continue
@@ -117,7 +117,7 @@ def parseXML(xml_list):
                 if float(interface['css']) < cssthresh or not all(molecule['class'] == 'Protein' for molecule in interface['molecule'][:2]):
                     continue
 
-                id_elements = ['{}_{}'.format(molecule['chain_id'],molecule['symop_no']) for molecule in interface['molecule'][:2]]
+                id_elements = [f"{molecule['chain_id']}_{molecule['symop_no']}" for molecule in interface['molecule'][:2]]
                 for idx,molecule in enumerate(interface['molecule'][:2]):
                     chain = molecule['chain_id']
                     if chain not in name:
@@ -132,13 +132,13 @@ def parseXML(xml_list):
                         inter[chain][int(res['seq_num'])].append(id_elements[not idx]+' '+res['asa']+' '+res['bsa']+' '+id_elements[idx])                  
 
             ##write interactions to .int file
-            with open(BASE_PATH+'INT/{}.int'.format(pdb_entry),'w') as int_file:
+            with open(f'{BASE_PATH}INT/{pdb_entry}.int','w') as int_file:
                 print('writing to file')
                 for chain,residues in sorted(name.items()):
                     for res_seq,res_name in sorted(residues.items()):
-                        int_file.write('{}\t{}\t{}\t'.format(chain,res_seq,res_name) + '\t'.join(inter[chain][res_seq])+'\n')
+                        int_file.write(f'{chain}\t{res_seq}\t{res_name}\t' + '\t'.join(inter[chain][res_seq])+'\n')
         else:
-            print('not okay')
+            print('not okay')F
                         
 
 def main():

@@ -27,11 +27,11 @@ def writeDomains(pdb_list,class_type='SCOP',fname=None):
     domains={pdb.lower(): pullDomains(pdb.lower(),class_type) for pdb in pdb_list}
 
     ##write to json file
-    with open(fname or 'domain_architectures_{}.json'.format(class_type), 'w') as file_out:
+    with open(fname or f'domain_architectures_{class_type}.json', 'w') as file_out:
         file_out.write(json.dumps(domains))
 
 def readDomains(file_name='SCOP'):
-     with open('domain_architectures_{}.json'.format(file_name)) as f:
+     with open(f'domain_architectures_{file_name}.json') as f:
           return json.load(f)
 
 

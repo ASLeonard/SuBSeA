@@ -4,6 +4,7 @@ import os
 
 from collections import defaultdict, Counter
 from operator import itemgetter
+from time import sleep
 import itertools
 
 import subprocess
@@ -14,13 +15,23 @@ import scipy.special
 import requests
 import json
 
+
 BASE_PATH='/scratch/asl47/PDB/'
 
 def pullFASTA(pdb,chain):
-    lines = requests.get('http://www.ebi.ac.uk/pdbe/entry/pdb/{}/fasta'.format(pdb),timeout=1).text.split('\n')
+    for _ in range(3):
+        try:
+            lines = requests.get(f'http://www.ebi.ac.uk/pdbe/entry/pdb/{pdb}/fasta',timeout=5).text.split('\n')
+            break
+        except requests.Timeout:
+            print('Timeout from EBI, pausing temporarily again')
+            sleep(5)
+    else:
+        return False
+
     for idx in range(0,len(lines),2):
         if chain in lines[idx][lines[idx].rfind('|')+1:]:
-            with open(BASE_PATH+'FASTA/{}_{}.fasta.txt'.format(pdb,chain),'w') as file_:
+            with open(f'{BASE_PATH}FASTA/{pdb}_{chain}.fasta.txt','w') as file_:
                 file_.write('>{}_{}\n'.format(pdb,chain)+lines[idx+1])
                 return True
     return False
@@ -29,27 +40,29 @@ def pullFASTA(pdb,chain):
     
 ##run needle alignment on two pbd_chain inputs
 def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
-    if os.path.exists('{BP}NEEDLE/{0}_{1}_{2}_{3}.needle'.format(pdb_1,chain_1,pdb_2,chain_2,BP=BASE_PATH)):
-        return
+    if os.path.exists(f'{BASE_PATH}NEEDLE/{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle'):
+        return True
+
     for pdb, chain in ((pdb_1,chain_1),(pdb_2,chain_2)):
-        file_name = '{2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH)
-        if os.path.exists(file_name) and os.path.getsize(file_name):
+        file_name = f'{BASE_PATH}FASTA/{pdb}_{chain}.fasta.txt'
+        if os.path.exists(file_name) and os.path.getsize(file_name) > 20:
             continue
 
         ##see if fasta info is in given file
         try:
-            subprocess.run('grep -i {0}_{1} -A1 {2}FASTA/clean_all_fasta.txt > {2}FASTA/{0}_{1}.fasta.txt'.format(pdb,chain,BASE_PATH),shell=True,check=True,stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(f'grep -i {pdb}_{chain} -A1 {BASE_PATH}FASTA/cleaned2_all_fasta.txt > {BASE_PATH}FASTA/{pdb}_{chain}.fasta.txt',shell=True,check=True,stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
-            print('Pulling FASTA data for {}_{}'.format(pdb,chain))
+            ##could not find FASTA data in all_fasta file, try downloading
+            print(f'Pulling FASTA data for {pdb}_{chain}')
             if not pullFASTA(pdb,chain):
-                raise ValueError('Chain does not seem to exist for {}_{}'.format(pdb,chain))
+                raise ValueError(f'Chain does not seem to exist for {pdb}_{chain}')
 
-    subprocess.run('{EXEC} {BP}FASTA/{0}_{1}.fasta.txt {BP}FASTA/{2}_{3}.fasta.txt -gapopen 10.0 -gapextend 0.5 -outfile {BP}NEEDLE/{0}_{1}_{2}_{3}.needle'.format(pdb_1,chain_1,pdb_2,chain_2,EXEC=needle_EXEC,BP=BASE_PATH),shell=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    subprocess.run(f'{needle_EXEC} {BASE_PATH}FASTA/{pdb_1}_{chain_1}.fasta.txt {BASE_PATH}FASTA/{pdb_2}_{chain_2}.fasta.txt -gapopen 10.0 -gapextend 0.5 -outfile {BASE_PATH}NEEDLE/{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle',shell=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
 def makeTypes(pdb):
     similaritythresh = 2.0
     type_ = {}
-    with open(BASE_PATH+'INT/{}.int'.format(pdb)) as file_:
+    with open(BASE_PATH+f'INT/{pdb}.int') as file_:
         for line_raw in file_:
             line = line_raw.split('\t')
             chain,res = line[:2]
@@ -123,7 +136,7 @@ def writePialign(pdbs,inter1a,inter1b,inter2a,inter2b,align,seq1,seq2):
 
             a=align[idx:idx+50]
            
-            pialign_out.write('{}\n{}\n{}   {}\n{}\n{}   {}\n{}\n{}\n\n'.format(inter1b[slice_],inter1a[slice_],seq1[slice_],idx_A,align[slice_],seq2[slice_],idx_B,inter2a[slice_],inter2b[slice_]))
+            pialign_out.write(f'{inter1b[slice_]}\n{inter1a[slice_]}\n{seq1[slice_]}   {idx_A}\n{align[slice_]}\n{seq2[slice_]}   {idx_B}\n{nter2a[slice_]}\n{inter2b[slice_]}\n\n')
 
 def makePmatrix(pdbs,inter1a,inter1b,inter2a,inter2b,write=True):
     matrix = defaultdict(int)
@@ -150,7 +163,7 @@ def makePmatrix(pdbs,inter1a,inter1b,inter2a,inter2b,write=True):
 
         ##write row header + values
         for i in rows:            
-            pmatrix_out.write('{}\t'.format(i)+'\t'.join(map(str,(matrix[(i,j)] for j in columns)))+'\n')
+            pmatrix_out.write(f'{i}\t'+'\t'.join(map(str,(matrix[(i,j)] for j in columns)))+'\n')
 
     
                 
@@ -300,7 +313,7 @@ def paralleliseAlignment(pdb_pairs):
         for (key,p_value) in pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50):
             #print(key)
             results['{}_{}_{}_{}'.format(*key)]=p_value
-
+    print('Finished parallel mapping')
     return results.copy()
         
     
@@ -311,55 +324,7 @@ if __name__ == "__main__":
     #except:
     #    print('wrong args')
         
-import random
-def randomArrange():
-    data=json.load(open('domain_groups.json'))
-    pdbs=([],[])
-    for pairing in data.values():
-        for i,pair in enumerate(pairing):
-            pdbs[i].extend(pair)
 
-    random_samples={}
-    for i,pairing in enumerate(data.values()):
-        random_samples[str(i)]=([],[])
-        for j,pair in enumerate(pairing):
-            for _ in range(len(pair)):
-                random_samples[str(i)][j].append(pdbs[j].pop(random.randint(0,len(pdbs[j])-1)))
-        
-    return random_samples
 
-import pandas as pd
-import matplotlib.pyplot as plt
-
-def plotComps(ls):
-    plt.figure()
-    labels={'':'Domains',2:'Random Shuffle',4:'Random Shuffle'}
-    vx=[]
-    for l in ls:
-        df = loadD(l)
-        ps = df['p']
-        ns,_,_=plt.hist(ps,bins=100,density=True,histtype='step',label=labels[l])
-        vx.append(ns)
-    vx=np.array(vx)
-    plt.plot(np.linspace(0,1,100),vx[0]/np.mean(vx[1:],axis=0),c='k',lw=2)
-    plt.plot([0,1],[1,1],'k--')
-
-    plt.yscale('log',nonposy='mask')
-    plt.legend()
-    plt.show(block=False)
-            
-def loadD(i):
-    ds=[]
-    with open('pre_lim{}.json'.format(i)) as file_in:
-        data=json.load(file_in)
-    for k,v in data.items():
-        if v is None:
-            continue
-        d={}
-        d['het']=k[:4]
-        d['hom']=k[7:11]
-        d['p']=v
-        ds.append(d)
-    return pd.DataFrame(ds)
                 
     

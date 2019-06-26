@@ -1,7 +1,7 @@
 def formatFASTA(fname,out_name=None):
     if not out_name:
         last_index = fname.rfind('/') + 1
-        out_name = fname[:last_index] + 'cleaned2_' + fname[last_index:]
+        out_name = fname[:last_index] + 'xx_' + fname[last_index:]
 
     with open(fname,'r') as fasta_in, open(out_name,'w') as fasta_out:
         pdb, sequence = None, ''
@@ -10,6 +10,11 @@ def formatFASTA(fname,out_name=None):
             if 'sequence' in line:
                 pdb = '_'.join(line.split(':')[:2])
             elif 'secstr' in line:
+                if '\n' in pdb or '\n' in sequence:
+                    raise Excepion('f')
+                if len(sequence) < 2:
+                    print(pdb,sequence)
+                    raise Exception('oh shit')
                 fasta_out.write(pdb+'\n'+sequence+'\n')
                 pdb, sequence = None, ''
             elif pdb:
@@ -18,10 +23,9 @@ def formatFASTA(fname,out_name=None):
 
 def loadCSV(fname):
     df = pandas.read_csv(fname,index_col=False)
-    #return df
+    rr=[]
     for index,row in df.iterrows():
         #row['BSAs']
-        #print(row['PDB_id'])
 
         interfaces = row['interfaces']
         if isinstance(interfaces,str):
@@ -31,16 +35,16 @@ def loadCSV(fname):
                 row['interfaces'] = set(interfaces.split('-'))
         else:
             row['interfaces'] = eval(row['interfaces'].values[0])
-        #print(type(row['domains']))
         if ';' in row['domains']:
             row['domains'] = {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in row['domains'].split(';') if len(dom)>1}
         else:
             row['domains'] = eval(row['domains'])
-        #print('D')
-        df.iloc[index] = row
-    return df
+        #df.iloc[index] = row
+        rr.append(row)
+        
+    return pandas.DataFrame(rr)
 
-from domains import invertDomains
+from domains import readDomains, invertDomains
 
 def invertCSVDomains(df):
     dom_dict = {}
@@ -51,7 +55,6 @@ def invertCSVDomains(df):
         
 import pandas
 from statistics import mean
-from domains import readDomains
 
 def getBadIDs(dx=None,raw_table=None):
     if raw_table is None:
@@ -153,6 +156,7 @@ def chainMap(extra=None):
     return dict(chainmap)
 
 from collections import defaultdict
+
 def fullFASTA(file_name):
     return os.path.exists(file_name) and os.path.getsize(file_name)
 

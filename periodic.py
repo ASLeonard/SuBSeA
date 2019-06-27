@@ -132,7 +132,7 @@ def randomProteinSampler(df, domain_mode, N_SAMPLE_LIMIT,match_partials=False):
                 if chain in interaction:
                     for edge in interaction.split('-'):
                         if edge in domains:
-                            anti_domains[chain].add(domains[edge])
+                            anti_domains[chain] |= {arch for arch in domains[edge]}
 
         heteromer_anti_domains[pdb] = dict(anti_domains)
         
@@ -157,7 +157,7 @@ def randomProteinSampler(df, domain_mode, N_SAMPLE_LIMIT,match_partials=False):
                         if N_SAMPLE_LIMIT and yielded_samples > N_SAMPLE_LIMIT:
                             return
 
-    yield heteromer_anti_domains                
+    #yield heteromer_anti_domains                
     if domain_mode == 'match':
         return
     
@@ -168,6 +168,7 @@ def randomProteinSampler(df, domain_mode, N_SAMPLE_LIMIT,match_partials=False):
     for _,row in homodimer_table.iterrows():
         if row['domains'] is not None:
             homodimer_domains[row['PDB_id']] = row['domains']
+    #yield homodimer_domains
     
     if domain_mode == 'enforce':
         while yielded_samples <= N_SAMPLE_LIMIT:
@@ -175,18 +176,20 @@ def randomProteinSampler(df, domain_mode, N_SAMPLE_LIMIT,match_partials=False):
             hom_option = choice(homodimer_set)
             
             try:
-                if any(darch in homodimer_domains[hom_option[:4]][hom_option[-1]] for darch in heteromer_anti_domains[het_option[:4]][het_option[-1]]):
+                HADs = heteromer_anti_domains[het_option[:4]][het_option[-1]]
+                BADs = homodimer_domains[hom_option[:4]][hom_option[-1]]
+                if domain_mode == 'enforce' and any(darch in HADs for darch in BADs):
                     continue
             except KeyError:
-                pass
+                continue # pass
 
             yield (het_option, hom_option)
             yielded_samples += 1
         return
     
     else: #random domain_mode
-        for hetero_index, homo_index_ in zip(randint(0,len(heteromer_set),N_SAMPLE_LIMIT),randint(0,len(homodimer_set),N_SAMPLE_LIMIT)):
-            yield (heteromer_set[hetero_index], homodimer_set[homo_index_])
+        for hetero_index, homo_index in zip(randint(0,len(heteromer_set),N_SAMPLE_LIMIT),randint(0,len(homodimer_set),N_SAMPLE_LIMIT)):
+            yield (heteromer_set[hetero_index], homodimer_set[homo_index])
         return  
 
 def chainMap():

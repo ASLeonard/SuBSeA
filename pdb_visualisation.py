@@ -156,11 +156,14 @@ def correspondingHomodimers(heteromerics, homomerics):
 def loadDict(t):
     return json.load(open('{}_comparison.dict'.format(t),'r'))
 
+def getFrac(data,key):
+    vals = list(data.values())
+    print('{:.3f}'.format(vals.count(key)/len(vals))) 
 
-def plotData(datas,ax=None,stat_func=ks_2samp):
+def plotData(datas,ax=None,stat_func=ks_2samp,merge_nones=True):
     labels = datas
     datas = [loadDict(d) for d in labels]
-    if True:
+    if merge_nones:
         cleaned_datas = [np.log10([val or 1 for val in data.values() if val!='error']) for data in datas]
     else:
         cleaned_datas = [np.log10(list(filter(lambda x: isinstance(x,float),data.values()))) for data in datas]

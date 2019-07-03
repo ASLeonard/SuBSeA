@@ -102,7 +102,6 @@ def visualiseOverlap(data_in):
     ax2.set_ylabel('frequency')
     plt.show(block=False)
     
-
 def randomProteinSampler(df, domain_mode, N_SAMPLE_LIMIT,match_partials=False):
     homodimer_table = loadCSV('PDB_homodimers.csv')
 
@@ -113,7 +112,27 @@ def randomProteinSampler(df, domain_mode, N_SAMPLE_LIMIT,match_partials=False):
     inverted_homodimer_domains = invertCSVDomains(homodimer_table)
     
     yielded_samples = 0
-    heteromer_domains, heteromer_anti_domains = {}, {}
+    heteromer_domains, heteromer_anti_domains = set(), {}
+    homodimer_set, heteromer_set = set(), set()
+
+    def yieldOp(pdb,chain,comp):
+        nonlocal yielded_samples
+        if domain_mode == 'match':
+            yield (f'{pdb}_{chain}', comp)
+            yielded_samples += 1
+            if N_SAMPLE_LIMIT and yielded_samples >= N_SAMPLE_LIMIT:
+                return
+        else:
+            heteromer_set.add(f'{pdb}_{chain}')
+            homodimer_set.add(comp)
+
+    for domains in df['domains']:
+        for archs in domains.values():
+            if match_partials:
+                heteromer_domains |= set(archs)
+            heteromer_domains.add(archs)
+            
+    
     
     for _, row in df.iterrows():
         pdb = row['PDB_id']
@@ -127,58 +146,53 @@ def randomProteinSampler(df, domain_mode, N_SAMPLE_LIMIT,match_partials=False):
         flat_chains = {chain for interaction in interactions for chain in interaction.split('-')}
 
         anti_domains = defaultdict(set)
-        for chain in flat_chains:
-            for interaction in interactions:
-                if chain in interaction:
-                    for edge in interaction.split('-'):
-                        if edge in domains:
-                            anti_domains[chain] |= {arch for arch in domains[edge]}
+        for interaction in interactions:
+            for edge in interaction.split('-'):
+                anti_domains[edge] |= {arch for chain in interaction.split('-') if chain in domains for arch in domains[chain]}
 
-        heteromer_anti_domains[pdb] = dict(anti_domains)
+        ##if the subunit has no domains, don't include ones it interacts with either
+        heteromer_anti_domains[pdb] = {k:v for k,v in anti_domains.items() if v and k in domains}
         
-        if domain_mode == 'match':
-            for chain in flat_chains:
-                ##no information on this subunit for domains
-                if chain not in domains:
-                    continue
+        
+        #if domain_mode == 'match':
+        for chain in flat_chains:
+            ##no information on this subunit for domains
+            if chain not in domains:
+                continue
                     
-                if match_partials:
-                    for partial_domain in domains[chain]:
-                        if partial_domain in inverted_homodimer_domains:
-                            for comp in inverted_homodimer_domains[partial_domain]:
-                                yield (pdb + '_' + chain, '{}_{}'.format(*comp.split('_')))
-                                yielded_samples += 1
-                                if N_SAMPLE_LIMIT and yielded_samples > N_SAMPLE_LIMIT:
-                                    return
-                if chain in domains and domains[chain] in inverted_homodimer_domains:
+            if match_partials:
+                for partial_domain in set(domains[chain]):
+                    if (partial_domain,) in inverted_homodimer_domains:
+                        for comp in inverted_homodimer_domains[(partial_domain,)]:
+                            yield from yieldOp(pdb,chain,comp)
+                                
+            else:
+                if domains[chain] in inverted_homodimer_domains:
                     for comp in inverted_homodimer_domains[domains[chain]]:
-                        yield (pdb + '_' + chain, '{}_{}'.format(*comp.split('_')))
-                        yielded_samples += 1
-                        if N_SAMPLE_LIMIT and yielded_samples > N_SAMPLE_LIMIT:
-                            return
-
-    #yield heteromer_anti_domains                
+                        yield from yieldOp(pdb,chain,comp)
+               
     if domain_mode == 'match':
         return
     
-    homodimer_set = list(f'{p}_{list(c)[0]}' for p,c in zip(homodimer_table['PDB_id'],homodimer_table['interfaces']))
-    heteromer_set = list(f'{p}_{j}' for p,c in zip(df['PDB_id'],df['interfaces']) for i in c for j in i.split('-'))
+    #homodimer_set = list(f'{p}_{list(c)[0]}' for p,c,D in zip(homodimer_table['PDB_id'],homodimer_table['interfaces'],homodimer_table['domains']) if (list(c)[0] in D and D[list(c)[0]] in heteromer_domains))
+    #heteromer_set = list(f'{p}_{j}' for p,c,D in zip(df['PDB_id'],df['interfaces'],df['domains']) for i in c for j in i.split('-') if j in D)
 
     homodimer_domains = {}
     for _,row in homodimer_table.iterrows():
         if row['domains'] is not None:
             homodimer_domains[row['PDB_id']] = row['domains']
-    #yield homodimer_domains
+
+    homodimer_set, heteromer_set = (tuple(set_) for set_ in (homodimer_set, heteromer_set))
     
     if domain_mode == 'enforce':
-        while yielded_samples <= N_SAMPLE_LIMIT:
+        while yielded_samples < N_SAMPLE_LIMIT:
             het_option = choice(heteromer_set)
             hom_option = choice(homodimer_set)
             
             try:
                 HADs = heteromer_anti_domains[het_option[:4]][het_option[-1]]
                 BADs = homodimer_domains[hom_option[:4]][hom_option[-1]]
-                if domain_mode == 'enforce' and any(darch in HADs for darch in BADs):
+                if any(darch in HADs for darch in BADs):
                     continue
             except KeyError:
                 continue # pass
@@ -186,10 +200,11 @@ def randomProteinSampler(df, domain_mode, N_SAMPLE_LIMIT,match_partials=False):
             yield (het_option, hom_option)
             yielded_samples += 1
         return
-    
-    else: #random domain_mode
-        for hetero_index, homo_index in zip(randint(0,len(heteromer_set),N_SAMPLE_LIMIT),randint(0,len(homodimer_set),N_SAMPLE_LIMIT)):
-            yield (heteromer_set[hetero_index], homodimer_set[homo_index])
+
+    ##elif domain_mode =='random'
+    else: 
+        for pairing in zip(choice(heteromer_set,N_SAMPLE_LIMIT,True),choice(homodimer_set,N_SAMPLE_LIMIT,True)):
+            yield pairing
         return  
 
 def chainMap():
@@ -204,14 +219,14 @@ def chainMap():
 def main(args):
     if args.exec_source:
         print('Loading periodic data')
-        df = loadCSV('Periodic_partial.csv')
+        df = loadCSV('Periodic_heteromers_C.csv')
         #loadCSV('Periodic_heteromers_CC.csv')#readHeteromers()
     else:
         print('Loading PDB heterodimer data')
         df = loadCSV('PDB_heterodimers.csv')
 
     
-    proteinGenerator = randomProteinSampler(df,args.exec_mode,args.N_samples)
+    proteinGenerator = randomProteinSampler(df,args.exec_mode,args.N_samples,args.allow_partials)
         
     if args.exec_style:
         results = paralleliseAlignment(proteinGenerator)
@@ -229,6 +244,10 @@ def main(args):
   
     with open('{}_{}_comparison.dict'.format('Table' if args.exec_source else 'PDB', args.file_name or ('domain_match' if args.exec_mode else 'random')),'w') as f_out:
         json.dump(results,f_out)
+
+    if args.exec_mode != 'match':
+        for key in results.keys():
+            os.remove(f'/scratch/asl47/PDB/NEEDLE/{key}.needle')
 
         
         
@@ -250,7 +269,8 @@ if __name__ == "__main__":
     #parser.add_argument('--R_mode', type=int,dest='R_mode')
     parser.add_argument('-N','--N_samples', type=int,dest='N_samples')
     parser.add_argument('--file_name', type=str,dest='file_name')
-    parser.set_defaults(exec_style=False,exec_mode=None,exec_source=True,N_samples=None,file_name=None,R_mode=-1)
+    parser.add_argument('--partial', action='store_true',dest='allow_partials')
+    parser.set_defaults(exec_style=False,exec_mode=None,exec_source=True,N_samples=None,file_name=None,allow_partials=False)
     
     args = parser.parse_args()
 

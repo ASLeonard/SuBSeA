@@ -156,17 +156,32 @@ def correspondingHomodimers(heteromerics, homomerics):
 def loadDict(t):
     return json.load(open('{}_comparison.dict'.format(t),'r'))
 
+def loadDF(t):
+    raw_data = loadDict(t)
+    rows = []
+    for key, (pval, similarity) in raw_data.items():
+        if pval == 'error':
+            continue
+        rows.append({'comparison':key,'pval':pval or 1,'similarity':similarity,'sg':int(similarity//10)})
+        
+    df = pd.DataFrame(rows)
+    df['pval'] = np.log10(df['pval'])
+    return df
+
 def getFrac(data,key):
     vals = list(data.values())
     print('{:.3f}'.format(vals.count(key)/len(vals))) 
 
 def plotData(datas,ax=None,stat_func=ks_2samp,merge_nones=True):
-    labels = datas
-    datas = [loadDict(d) for d in labels]
-    if merge_nones:
-        cleaned_datas = [np.log10([val or 1 for val in data.values() if val!='error']) for data in datas]
+    if isinstance(datas,list) and isinstance(datas[0],dict):
+        labels = ['1']*len(datas)
     else:
-        cleaned_datas = [np.log10(list(filter(lambda x: isinstance(x,float),data.values()))) for data in datas]
+        labels = datas
+        datas = [loadDict(d) for d in labels]
+    if merge_nones:
+        cleaned_datas = [np.log10([val[0] or 1 for val in data.values() if val!='error']) for data in datas]
+    else:
+        cleaned_datas = [np.log10(list(filter(lambda x: isinstance(x[0],float),data.values()))) for data in datas]
     #
 
     main_range=(-10,0)   
@@ -199,3 +214,29 @@ def plotData(datas,ax=None,stat_func=ks_2samp,merge_nones=True):
     #print(stat_func(*cleaned_datas))
     return ax
      
+def plotSNS(df):
+    sns.jointplot(data=df,x='pval',y='similarity',kind='hex',joint_kws={'gridsize':(1000,100),'bins':'log'})
+    plt.show(block=False)
+
+def plotSNS2(df):
+    grid = sns.JointGrid(x='pval', y='similarity', data=df)
+
+    g = grid.plot_joint(plt.hexbin,gridsize=(300,50),bins='log',cmap='RdGy',mincnt=1,extent=(-15,0,0,100))
+    sns.kdeplot(df['pval'], ax=g.ax_marg_x, legend=False,clip=(-10,0))
+    g.ax_marg_x.set_yscale('log')
+    g.ax_marg_x.set_ylim(1e-6,1)
+    sns.kdeplot(df['similarity'], ax=g.ax_marg_y, vertical=True, legend=False)
+    plt.show(block=False)
+
+def plotCats(df,ax=None,ls='-'):
+    if ax is None:
+        f, ax =plt.subplots()
+    cmap = plt.get_cmap('tab20')
+    for i in range(11):
+        if len(df.loc[df['sg']==i]['pval']) < 10:
+            continue
+        sns.distplot(a=df.loc[df['sg']==i]['pval'],bins=np.linspace(-20,0,100),ax=ax,norm_hist=True,color=cmap(i/11),label=i,kde_kws={'ls':ls,'alpha':1})
+    plt.yscale('log',nonposy='mask')
+    plt.legend()
+    plt.show(block=False)
+    return ax

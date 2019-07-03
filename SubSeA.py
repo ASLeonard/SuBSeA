@@ -85,6 +85,8 @@ def readNeedle(pdbs):
         for line in file_:
             ##can skip empty or commented lines in .needle file
             if line == '\n' or line[0] == '#':
+                if 'Similarity' in line:
+                    similarity = float(line[line.find('(')+1 : line.find('%')])
                 continue
             
             ll = line.strip().split()
@@ -96,8 +98,7 @@ def readNeedle(pdbs):
             elif read == 1:
                 align += line[21:71].replace(' ','_').strip()
 
-    return seqs, align
-        
+    return seqs, align, similarity
 
 def makeInteractions(type_, seq, chain):
 
@@ -136,7 +137,7 @@ def writePialign(pdbs,inter1a,inter1b,inter2a,inter2b,align,seq1,seq2):
 
             a=align[idx:idx+50]
            
-            pialign_out.write(f'{inter1b[slice_]}\n{inter1a[slice_]}\n{seq1[slice_]}   {idx_A}\n{align[slice_]}\n{seq2[slice_]}   {idx_B}\n{nter2a[slice_]}\n{inter2b[slice_]}\n\n')
+            pialign_out.write(f'{inter1b[slice_]}\n{inter1a[slice_]}\n{seq1[slice_]}   {idx_A}\n{align[slice_]}\n{seq2[slice_]}   {idx_B}\n{inter2a[slice_]}\n{inter2b[slice_]}\n\n')
 
 def makePmatrix(pdbs,inter1a,inter1b,inter2a,inter2b,write=True):
     matrix = defaultdict(int)
@@ -165,17 +166,29 @@ def makePmatrix(pdbs,inter1a,inter1b,inter2a,inter2b,write=True):
         for i in rows:            
             pmatrix_out.write(f'{i}\t'+'\t'.join(map(str,(matrix[(i,j)] for j in columns)))+'\n')
 
+def readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2):
+    tsv = np.loadtxt(BASE_PATH+'PALIGN/{}_{}_{}_{}.pmatrix'.format(pdb_1,chain_1,pdb_2,chain_2),dtype=str,delimiter='\t')
+    column_headers = tsv[0, 1:]
+    row_headers = tsv[1:, 0]
+    matrix = tsv[1:, 1:].astype(int)
+    
+    for swap in (column_headers,row_headers):
+        if swap[0] == '  ':
+            swap[0]='-'
+    return column_headers, row_headers, matrix
+
     
                 
 def generateAssistiveFiles(pdbs,write_intermediates=False):
     needleAlign(*pdbs,needle_EXEC='/rscratch/asl47/needle')
 
-    type1=makeTypes(pdbs[0])
-    type2=makeTypes(pdbs[2])
-    (seq1,seq2),align=readNeedle(pdbs)
+    type1 = makeTypes(pdbs[0])
+    type2 = makeTypes(pdbs[2])
+    (seq1,seq2),align, similarity = readNeedle(pdbs)
+ 
 
-    int_1A,int_1B=makeInteractions(type1,seq1,pdbs[1])
-    int_2A,int_2B=makeInteractions(type2,seq2,pdbs[3])
+    int_1A,int_1B = makeInteractions(type1,seq1,pdbs[1])
+    int_2A,int_2B = makeInteractions(type2,seq2,pdbs[3])
 
     if write_intermediates:
         writePialign(pdbs,int_1A,int_1B,int_2A,int_2B,align,seq1,seq2)
@@ -183,7 +196,7 @@ def generateAssistiveFiles(pdbs,write_intermediates=False):
     len_seq1,len_seq2 = (sum(c.isalpha() for c in seq) for seq in (seq1,seq2))
     no_overlap = len_seq1 + len_seq2 - len(align)
     
-    return ((len_seq1,len_seq2,no_overlap), makePmatrix(pdbs,int_1A,int_1B,int_2A,int_2B,write_intermediates))
+    return ((similarity, no_overlap,len_seq1,len_seq2), makePmatrix(pdbs,int_1A,int_1B,int_2A,int_2B,write_intermediates))
 
     
 
@@ -198,82 +211,42 @@ def binomialcdf(n,m1,m2,n1,n2,novg):
     return scipy.stats.binom.sf(n-1,novg,m1*m2/(n1*n2))
 
 def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
-
-    def readNeedleFile():
-        with open(BASE_PATH+'NEEDLE/{}_{}_{}_{}.needle'.format(pdb_1,chain_1,pdb_2,chain_2)) as needle_file:
-            length = {}
-            for line in needle_file:
-                lss=line.strip().split()
-             
-                if 'Gaps' in line:
-                    gapped=line.strip().split()[2].split('/')
-                    noverlap=int(gapped[1])-int(gapped[0])
-                elif line[0] != '#' and len(lss) == 4 and '_' in line:
-                    length[lss[0].upper()] = int(lss[-1])
-        return tuple(length.values()), noverlap
-
-    def readPmatrixFile():
-        tsv = np.loadtxt(BASE_PATH+'PALIGN/{}_{}_{}_{}.pmatrix'.format(pdb_1,chain_1,pdb_2,chain_2),dtype=str,delimiter='\t')
-        column_headers = tsv[0, 1:]
-        row_headers = tsv[1:, 0]
-        matrix = tsv[1:, 1:].astype(int)
-        
-        for swap in (column_headers,row_headers):
-            if swap[0] == '  ':
-                swap[0]='-'
-        return column_headers, row_headers, matrix
-                       
     if needle_result:
-        length, noverlap = needle_result[:2], needle_result[2]
+        similarity, noverlap, *length  = needle_result
     else:
-        length, noverlap = readNeedleFile()
+        (seq1,seq2),align, similarity = readNeedle([pdb_1,chain_1,pdb_2,chain_2])
+        length = (sum(c.isalpha() for c in seq) for seq in (seq1,seq2))
+        noverlap = sum(length) - len(align)
         
     if matrix_result:
         row_headers,column_headers, matrix = matrix_result
+        print(row_headers, column_headers)
     else:
-        column_headers,row_headers, matrix = readPmatrixFile()
+        column_headers,row_headers, matrix = readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2)
 
     ##trivially no possible matches
     if any(i<2 for i in matrix.shape):
-        return None
+        return (None,similarity)
 
-        
-
-    #total = np.sum(matrix)
-    rowsum = np.sum(matrix,axis=1)
-    colsum = np.sum(matrix,axis=0)
-
+    #pmatrix = np.ones(matrix.shape)
+    colsums,rowsums = np.meshgrid(*(np.sum(matrix,axis=I) for I in (1,0)),indexing='ij')
     
-    pmatrix = np.empty(matrix.shape)
 
-    for row in range(len(matrix)):
-        for column in range(len(matrix[row])):
-            if matrix[row,column] == 0 or row == 0 or column == 0:
-                pmatrix[row,column] = 1.0
-            else:
-                pmatrix[row,column] = binomialcdf(matrix[row,column],rowsum[row],colsum[column],*length,novg=noverlap)
-
+    pmatrix = binomialcdf(matrix,rowsums,colsums,*length,novg=noverlap)
 
     val_matrix=pmatrix[1:,1:].copy()
 
-    def findMinElements(tm,mins=[]):
-        if len(mins)>1000:
-            raise Exception('Recursed a lot of times, probably wrong')
-        if np.min(tm) <= 1:
-            ri,ci = divmod(np.argmin(tm),tm.shape[1])
-            mins.append(tm[ri,ci])
-            tm[ri,:]=2
-            tm[:,ci]=2
-            return findMinElements(tm,mins)
+    def findMinElements(p_array,mins=[]):
+        if np.min(p_array) <= 1:
+            row_i,col_i = divmod(np.argmin(p_array),p_array.shape[1])
+            mins.append(p_array[row_i,col_i])
+            p_array[row_i,:] = np.inf
+            p_array[:,col_i] = np.inf
+            return findMinElements(p_array,mins)
         else:
             return mins
-            
         
-    #return(pmatrix)
-    return pcombine(findMinElements(val_matrix))
-    #print(tuple((Counter(np.min(pmatrix[1:,1:],axis=0)) & Counter(np.min(pmatrix[1:,1:],axis=1))).elements()))
-    ##find min pvalues for row/columns uniquely
-    #return pcombine(tuple((Counter(np.min(pmatrix[1:,1:],axis=0)) & Counter(np.min(pmatrix[1:,1:],axis=1))).elements()))
+    return (pcombine(findMinElements(val_matrix)),similarity)
 
 
 
@@ -283,48 +256,18 @@ from multiprocessing import Pool,Manager
 def calculatePvalue(pdb_combination):
     (het,hom) = pdb_combination
     args=(het[:4].upper(),het[5],hom[:4].upper(),hom[5])
-    try:
-        n_r, m_r = generateAssistiveFiles(args)
-        return (args,MatAlign(*args,needle_result=n_r,matrix_result=m_r))
-    except Exception as e:
-        print(het,hom,e)
-        return (args, 'error')
-    
-def runParallelAlign(pdb_code_file):
-    
-    with open(pdb_code_file,'r') as file_in:
-        data=json.load(file_in)
-        
-    results = Manager().dict()
-        
-    with Pool() as pool:
-        for pairing in data.values():
-            for (key,p_value) in pool.map(calculatePvalue,itertools.product(*pairing),chunksize=50):
-                results['{}_{}_{}_{}'.format(*key)]=p_value
-
-        
-    with open('pre_lim4.json', 'w') as file_:
-          file_.write(json.dumps(results.copy()))
-          
+    #try:
+    n_r, m_r = generateAssistiveFiles(args)
+    return (args,MatAlign(*args,needle_result=n_r,matrix_result=m_r))
+    #except Exception as e:
+    #    print(het,hom,e)
+    #    return (args, 'error')
+              
 def paralleliseAlignment(pdb_pairs):
     print('Parellelising alignment')
     results = Manager().dict()
     with Pool() as pool:
         for (key,p_value) in pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50):
-            #print(key)
             results['{}_{}_{}_{}'.format(*key)]=p_value
     print('Finished parallel mapping')
-    return results.copy()
-        
-    
-
-if __name__ == "__main__":
-    #try:
-    runParallelAlign(sys.argv[1])
-    #except:
-    #    print('wrong args')
-        
-
-
-                
-    
+    return results.copy()   

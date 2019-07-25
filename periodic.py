@@ -1,5 +1,5 @@
 ##local imports
-from domains import readDomains, invertDomains, getUniqueHomodimerDomains
+from domains import readDomains, invertDomains, getUniqueHomodimerDomains,domainMatch
 from SubSeA import paralleliseAlignment, calculatePvalue
 #from pdb_visualisation import scrubInput
 from utility import loadCSV, invertCSVDomains
@@ -14,6 +14,29 @@ import json
 import argparse
 import matplotlib.pyplot as plt
 import numpy as np
+from itertools import combinations
+
+def overlaps(df):
+    rows = []
+
+    for _,row in df.iterrows():
+        for pair in row['interfaces']: #combinations(row['domains'].keys()):
+            if isinstance(row['BSAs'],str):
+                try:
+                    row['BSAs'] = eval(row['BSAs'])
+                except:
+                    print(type(row['BSAs']))
+                    print("ERR",row['BSAs'])
+            #),['C-D'],pair,type(pair))
+            #row['BSAs'][pair])#domainMatch(row['domains'],*pair.split('-')))
+            try:
+                rows.append({'id':row['PDB_id']+'_'+str(pair),'shared':domainMatch(row['domains'],*pair.split('-')),'BSA':row['BSAs'][pair]})
+            except:
+                print(row)
+
+    print('concant')
+    return pandas.DataFrame(rows)
+            
 
 def readHeteromers(file_path='~/Downloads/PeriodicTable.csv'):
     return pandas.read_csv(file_path)

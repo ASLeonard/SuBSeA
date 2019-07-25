@@ -138,7 +138,7 @@ def parseXML(xml_list):
                     for res_seq,res_name in sorted(residues.items()):
                         int_file.write(f'{chain}\t{res_seq}\t{res_name}\t' + '\t'.join(inter[chain][res_seq])+'\n')
         else:
-            print('not okay')F
+            print('not okay')
                         
 
 def main():

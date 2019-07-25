@@ -7,7 +7,9 @@ import requests
 from collections import defaultdict, Counter
 import numpy as np
 from itertools import product
-from scipy.stats import linregress, ks_2samp, anderson_ksamp#,epps_singleton_2samp, mannwhitneyu
+from scipy.stats import linregress, ks_2samp, anderson_ksamp, mannwhitneyu#,epps_singleton_2samp
+
+from periodic import loadCSV,overlaps
 
 from domains import readDomains, domainMatch
 
@@ -78,34 +80,65 @@ def scrubInput(run_name,local_alignment=True,similarity=True,domain='SCOP'):
             continue
         rows_list.append(d)
     return pd.DataFrame(rows_list)
-          
 
-def plotData(data,stat_func=''):
+def convertH(df):
+    rows = []
+    for _,row in df.iterrows():
+        rows.append({'id':'a','shared':domainMatch(row['domains'],*row['interfaces']),'BSA':row['BSAs']})
+
+    return pd.DataFrame(rows)
+
+def plotDataX(data,stat_func=''):
     #g=sns.regplot(x="TM", y="BSA", data=data)                  
     #g = sns.violinplot(y="BSA",data=low)#xlim=(0,1))
     #plt.figure()
     #g3 = sns.violinplot(y="BSA",data=high)#xlim=(0,1))
     #g2 = sns.jointplot(x="TM", y="BSA",data=data,xlim=(0,1))
-    sns.relplot(x='TM', y='BSA', size="BSA",sizes=(40, 400),hue='domain', alpha=.75, height=6, data=data)
+    #sns.relplot(x='TM', y='BSA', size="BSA",sizes=(40, 400),hue='domain', alpha=.75, height=6, data=data)
     plt.figure()
-    ax = sns.violinplot(x="domain", y="BSA",hue='d_group', data=data, palette="muted",split=False,  scale="width",scale_hue=True,inner="quartile",bw=.1)
+    ax = sns.violinplot(x="shared", y="BSA", data=data, palette="muted",split=False,  scale="width",scale_hue=True,inner="quartile",bw=.35)
+
     
     plt.show(block=False)
-    low=data.loc[data['S_pred']=='no']
-    high=data.loc[data['S_pred']=='yes']
+    low = data.loc[(data['shared']=='none')]# | (data['shared']=='NA')]
+    high = data.loc[(data['shared']=='full') | (data['shared']=='partial')]
+    homodimer_ref = data.loc[(data['shared']=='homodimer')]
     for val, dic in zip(('High','Low'),(high,low)):
         print("{}: ({})".format(val,len(dic))," = ", np.nanmedian(dic['BSA']))
      
     print("\np-value: {}\n".format(mannwhitneyu(high['BSA'],low['BSA'],alternative='greater')[1]))
-    for overlap in ('full','partial','none','NA'):
-         print(overlap,"({})".format(len(data.loc[data['domain']==overlap])),np.nanmedian([float(i) for i in data.loc[data['domain']==overlap]['BSA']]))
+    print("\np-value: {}\n".format(mannwhitneyu(homodimer_ref['BSA'],low['BSA'])[1]))
+    print("\np-value: {}\n".format(mannwhitneyu(homodimer_ref['BSA'],high['BSA'])[1]))
     
-    domain_yes=data.loc[(data['domain']=='full') | (data['domain']=='partial')]
-    domain_no=data.loc[data['domain']=='none']
+    for overlap in ('full','partial','none'): #'NA'
+         print(overlap,"({})".format(len(data.loc[data['shared']==overlap])),np.nanmedian([float(i) for i in data.loc[data['shared']==overlap]['BSA']]))
+    
+    domain_yes=data.loc[(data['shared']=='full') | (data['shared']=='partial')]
+    domain_no=data.loc[data['shared']=='none']
     #data.loc[~(data['domain']=='full') & ~(data['domain']=='partial')]
     print("\np-value: {}".format(mannwhitneyu(domain_yes['BSA'],domain_no['BSA'],alternative='greater')[1]))
     print('\n CLES: ',commonLanguageES(domain_no['BSA'],domain_yes['BSA']))
     print(np.nanmedian(domain_yes['BSA']),np.nanmedian(domain_no['BSA']))
+
+
+def plotHeteromerBSA(df):
+
+    domain_yes=df.loc[(df['shared']=='full') | (df['shared']=='partial')]
+    domain_no=df.loc[(df['shared']=='none') | (df['shared']=='NA')]
+
+    f, ax = plt.subplots()
+    
+    for overlap in ('full','partial','none','NA'):
+        sns.kdeplot(ax=ax,data=df.loc[df['shared']==overlap]['BSA'],bw=.1)
+
+    f, ax = plt.subplots()
+    
+    for dd in (domain_yes,domain_no):
+        sns.kdeplot(ax=ax,data=dd['BSA'])
+
+    plt.show()
+        
+    
 
 ##find fraction of pairs where the higher element is actually higher than the lower element
 def commonLanguageES(lows, highs):

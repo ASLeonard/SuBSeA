@@ -1,3 +1,19 @@
+from SubSeA import pullFASTA
+
+
+
+def swapT(df,df2):
+    rows = []
+    for _,row in df.iterrows():
+        row2 = df2.loc[df2['PDB_id']==row['PDB_id']]
+        if row2 is not None:
+            try:
+                rows.append({'PDB_id':row['PDB_id'], 'interfaces':row['interfaces'],'domains':row['domains'],'BSAs':row2['BSAs'].values[0]})
+            except:
+                print(row2['BSAs'])
+        else:
+            print(row)
+    return rows
 def formatFASTA(fname,out_name=None):
     if not out_name:
         last_index = fname.rfind('/') + 1
@@ -141,8 +157,7 @@ def mergeSheets():
 
                 domain_info = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
                 
-                
-                new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info, 'BSAs':','.join(map(str,[BSA_av[K] for K in meaningful_interfaces]))})
+                new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info, 'BSAs': str({K:BSA_av[K] for K in meaningful_interfaces})})
 
     return pandas.DataFrame(new_rows)
 

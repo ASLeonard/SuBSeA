@@ -1,6 +1,6 @@
 from SubSeA import pullFASTA
-
-
+from domains import pullDomains
+import json
 
 def swapT(df,df2):
     rows = []
@@ -14,6 +14,7 @@ def swapT(df,df2):
         else:
             print(row)
     return rows
+
 def formatFASTA(fname,out_name=None):
     if not out_name:
         last_index = fname.rfind('/') + 1
@@ -30,7 +31,7 @@ def formatFASTA(fname,out_name=None):
                     raise Excepion('f')
                 if len(sequence) < 2:
                     print(pdb,sequence)
-                    raise Exception('oh shit')
+                    raise Exception('Something went wrong!')
                 fasta_out.write(pdb+'\n'+sequence+'\n')
                 pdb, sequence = None, ''
             elif pdb:
@@ -45,16 +46,18 @@ def loadCSV(fname):
 
         interfaces = row['interfaces']
         if isinstance(interfaces,str):
-            if '{' in interfaces:
+            if '[' in interfaces:
                 row['interfaces'] = eval(interfaces)
             else:
                 row['interfaces'] = set(interfaces.split('-'))
         else:
             row['interfaces'] = eval(row['interfaces'].values[0])
-        if ';' in row['domains']:
+        if True or ';' in row['domains']:
             row['domains'] = {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in row['domains'].split(';') if len(dom)>1}
         else:
             row['domains'] = eval(row['domains'])
+
+        row['BSAs'] = eval(row['BSAs'])
         #df.iloc[index] = row
         rr.append(row)
         
@@ -62,12 +65,12 @@ def loadCSV(fname):
 
 from domains import readDomains, invertDomains
 
-def invertCSVDomains(df):
+def invertCSVDomains(df, partials=False):
     dom_dict = {}
     for _,row in df.iterrows():
         if row['domains'] is not None:
             dom_dict[row['PDB_id']] = row['domains']
-    return invertDomains(dom_dict)
+    return invertDomains(dom_dict,partials)
         
 import pandas
 from statistics import mean
@@ -110,23 +113,31 @@ def nextWave(bads):
                 
         
 
-def mergeSheets():
+def mergeSheets(heteromerics=True):
+
+    DEX_interface = 'T' if heteromerics else 'I'
 
     interface_KEY = 'List of interface types (I- isologous homomeric; H - heterologous homomeric; T - heteromeric)'
     interface_LIST = 'List of interface types (all identical subunits are given the same code)'
     interface_BSA= 'List of interface sizes (Angstroms^2)'
 
     assembly_SYM = 'Symmetry group (M - monomer; Dna - dihedral with heterologous interfaces; Dns - dihedral with only isologous interfaces; Ts - tetrahedral with isologous interfaces; Ta - tetrahedral with only heterologous interfaces; O* - 4 different octahedral topologies)'
-    data_heteromers = pandas.read_excel('~/Downloads/PeriodicTable.xlsx',sheet_name=[0,2])
 
-    domain_dict=readDomains('periodic')
+    redundant = 'Included in non-redundant set'
+    
+    data_heteromers = pandas.read_excel('~/Downloads/PeriodicTable.xlsx',sheet_name=[2])
+
+    domain_dict=readDomains('periodic3')
     chain_map = chainMap()
     chain_mapE = chainMap('Extra')
     new_rows = []
 
     for data in data_heteromers.values():
         for i, row in data.iterrows():
+            if redundant in row and row[redundant] == 0:
+                continue
             PDB_code = row['PDB ID']
+            
             if assembly_SYM in row and row[assembly_SYM] == 'M':
                 continue
             
@@ -136,13 +147,14 @@ def mergeSheets():
                 if PDB_code in chain_map:
                     for swaps in chain_map[PDB_code].items():
                         row[interface_LIST] = row[interface_LIST].replace(*swaps)
+                        
                 if PDB_code in chain_mapE:
                     for swaps in chain_mapE[PDB_code].items():
                         row[interface_LIST] = row[interface_LIST].replace(*swaps)
-                all_interfaces = zip(row[interface_LIST].split(','),row[interface_KEY].split(','))
+                        
+                all_interfaces = zip(row[interface_LIST].split(','),row[interface_KEY].split(','))   
                 
-                
-                meaningful_interfaces = {'-'.join(sorted(interface.split('-'))) for (interface,type_) in all_interfaces if (type_ != 'H' and interface[0] != interface[2])}
+                meaningful_interfaces = list({'-'.join(sorted(interface.split('-'))) for (interface,type_) in all_interfaces if (type_ == DEX_interface and (not heteromerics or interface[0] != interface[2]))})
 
                 if not meaningful_interfaces:
                     continue
@@ -155,9 +167,24 @@ def mergeSheets():
 
                 BSA_av = {K:round(mean(V)) for K,V in BSAs.items()}
 
+                if PDB_code not in domain_dict:
+                    print('pulling for ',PDB_code)
+                    domain_dict[PDB_code] = pullDomains(PDB_code)
+
+                original_length = len(meaningful_interfaces)
+                for index,interface in enumerate(meaningful_interfaces[:]):
+                    if not all(chain in domain_dict[PDB_code] for chain in interface.split('-')):
+                        del meaningful_interfaces[index + len(meaningful_interfaces) - original_length]
+                if not meaningful_interfaces:
+                    continue
+                
                 domain_info = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
                 
                 new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info, 'BSAs': str({K:BSA_av[K] for K in meaningful_interfaces})})
+
+                
+    with open('domain_architectures_periodic3.json', 'w') as file_out:
+        file_out.write(json.dumps(domain_dict))
 
     return pandas.DataFrame(new_rows)
 

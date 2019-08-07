@@ -7,7 +7,7 @@ import requests
 from collections import defaultdict, Counter
 import numpy as np
 from itertools import product
-from scipy.stats import linregress, ks_2samp, anderson_ksamp, mannwhitneyu#,epps_singleton_2samp
+from scipy.stats import linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp
 
 from periodic import loadCSV,overlaps
 
@@ -84,11 +84,12 @@ def scrubInput(run_name,local_alignment=True,similarity=True,domain='SCOP'):
 def convertH(df):
     rows = []
     for _,row in df.iterrows():
-        rows.append({'id':'a','shared':domainMatch(row['domains'],*row['interfaces']),'BSA':row['BSAs']})
+        for interface in row['interfaces']:
+            rows.append({'id':'a','shared':domainMatch(row['domains'],*interface.split('-')),'BSA':row['BSAs'][interface]})
 
     return pd.DataFrame(rows)
 
-def plotDataX(data,stat_func=''):
+def plotDataX(data,stat_func=mannwhitneyu):
     #g=sns.regplot(x="TM", y="BSA", data=data)                  
     #g = sns.violinplot(y="BSA",data=low)#xlim=(0,1))
     #plt.figure()
@@ -96,29 +97,33 @@ def plotDataX(data,stat_func=''):
     #g2 = sns.jointplot(x="TM", y="BSA",data=data,xlim=(0,1))
     #sns.relplot(x='TM', y='BSA', size="BSA",sizes=(40, 400),hue='domain', alpha=.75, height=6, data=data)
     plt.figure()
-    ax = sns.violinplot(x="shared", y="BSA", data=data, palette="muted",split=False,  scale="width",scale_hue=True,inner="quartile",bw=.35)
+    ax = sns.violinplot(x="shared", y="BSA", data=data, palette="muted",split=False,  scale="count",scale_hue=True,inner="quartile",cut=0,bw=.3)
 
     
     plt.show(block=False)
     low = data.loc[(data['shared']=='none')]# | (data['shared']=='NA')]
     high = data.loc[(data['shared']=='full') | (data['shared']=='partial')]
-    homodimer_ref = data.loc[(data['shared']=='homodimer')]
-    for val, dic in zip(('High','Low'),(high,low)):
+    homodimer_ref = data.loc[(data['shared']=='hom')]
+    for val, dic in zip(('High','Low','Ref'),(high,low,homodimer_ref)):
         print("{}: ({})".format(val,len(dic))," = ", np.nanmedian(dic['BSA']))
      
-    print("\np-value: {}\n".format(mannwhitneyu(high['BSA'],low['BSA'],alternative='greater')[1]))
-    print("\np-value: {}\n".format(mannwhitneyu(homodimer_ref['BSA'],low['BSA'])[1]))
-    print("\np-value: {}\n".format(mannwhitneyu(homodimer_ref['BSA'],high['BSA'])[1]))
+    print("\np-value: {}\n".format(stat_func(high['BSA'],low['BSA'],alternative='greater',distribution='normal')[1]))
+    print("\np-value: {}\n".format(stat_func(homodimer_ref['BSA'],low['BSA'],distribution='normal')[1]))
+    print("\np-value: {}\n".format(stat_func(homodimer_ref['BSA'],high['BSA'],distribution='normal')[1]))
     
-    for overlap in ('full','partial','none'): #'NA'
-         print(overlap,"({})".format(len(data.loc[data['shared']==overlap])),np.nanmedian([float(i) for i in data.loc[data['shared']==overlap]['BSA']]))
+    #for overlap in ('full','partial','none'): #'NA'
+    #     print(overlap,"({})".format(len(data.loc[data['shared']==overlap])),np.nanmedian([float(i) for i in data.loc[data['shared']==overlap]['BSA']]))
     
-    domain_yes=data.loc[(data['shared']=='full') | (data['shared']=='partial')]
-    domain_no=data.loc[data['shared']=='none']
+    #domain_yes=data.loc[(data['shared']=='full') | (data['shared']=='partial')]
+    #domain_no=data.loc[data['shared']=='none']
     #data.loc[~(data['domain']=='full') & ~(data['domain']=='partial')]
-    print("\np-value: {}".format(mannwhitneyu(domain_yes['BSA'],domain_no['BSA'],alternative='greater')[1]))
-    print('\n CLES: ',commonLanguageES(domain_no['BSA'],domain_yes['BSA']))
-    print(np.nanmedian(domain_yes['BSA']),np.nanmedian(domain_no['BSA']))
+    #print("\np-value: {}".format(mannwhitneyu(domain_yes['BSA'],domain_no['BSA'],alternative='greater')[1]))
+    
+    #print('\n CLES: ',commonLanguageES(low['BSA'],high['BSA']))
+    #print('\n CLES: ',commonLanguageES(high['BSA'],homodimer_ref['BSA']))
+    #print('\n CLES: ',commonLanguageES(low['BSA'],homodimer_ref['BSA']))
+
+    #print(np.nanmedian(domain_yes['BSA']),np.nanmedian(domain_no['BSA']))
 
 
 def plotHeteromerBSA(df):
@@ -128,15 +133,15 @@ def plotHeteromerBSA(df):
 
     f, ax = plt.subplots()
     
-    for overlap in ('full','partial','none','NA'):
-        sns.kdeplot(ax=ax,data=df.loc[df['shared']==overlap]['BSA'],bw=.1)
+    for overlap in ('full','partial','none','NA','hom'):
+        sns.kdeplot(ax=ax,data=df.loc[df['shared']==overlap]['BSA'],label=overlap)
 
     f, ax = plt.subplots()
     
     for dd in (domain_yes,domain_no):
         sns.kdeplot(ax=ax,data=dd['BSA'])
 
-    plt.show()
+    plt.show(0)
         
     
 
@@ -186,16 +191,18 @@ def correspondingHomodimers(heteromerics, homomerics):
                
     return non_trivial
 
-def loadDict(t):
-    return json.load(open('{}_comparison.dict'.format(t),'r'))
+def loadDict(file_ID):
+    return json.load(open(f'{file_ID}_comparison.dict','r'))
 
-def loadDF(t):
-    raw_data = loadDict(t)
+def loadND(file_ID):
+    return np.fromfile(open(f'{file_ID}_comparison.ND','r')).reshape(-1,2)
+
+def loadDF(file_ID,json_save = False):
+    raw_data = (loadDict if json_save else loadND)(file_ID) 
     rows = []
-    for key, (pval, similarity) in raw_data.items():
-        if pval == 'error':
-            continue
-        rows.append({'comparison':key,'pval':pval or 1,'similarity':similarity,'sg':int(similarity//10)})
+    for results in (raw_data.values() if json_save else raw_data):
+        pval, similarity = results
+        rows.append({'pval':pval or 1,'similarity':similarity,'sg':int(similarity//10)})
         
     df = pd.DataFrame(rows)
     df['pval'] = np.log10(df['pval'])
@@ -212,12 +219,12 @@ def plotData(datas,ax=None,stat_func=ks_2samp,merge_nones=True):
         labels = datas
         datas = [loadDict(d) for d in labels]
     if merge_nones:
-        cleaned_datas = [np.log10([val[0] or 1 for val in data.values() if val!='error']) for data in datas]
+        cleaned_datas = [np.log10([val[0] or 1 for val in data.values() if (val!='error' and val[1]<300)]) for data in datas]
     else:
         cleaned_datas = [np.log10(list(filter(lambda x: isinstance(x[0],float),data.values()))) for data in datas]
     #
 
-    main_range=(-10,0)   
+    main_range=(-25,0)   
     
     if not ax:
         f,ax = plt.subplots()
@@ -242,7 +249,8 @@ def plotData(datas,ax=None,stat_func=ks_2samp,merge_nones=True):
           
     ax.set_yscale('log')
     ax.axvline(np.log10(.05),c='darkgrey',ls='--',lw=5)
-     
+
+    plt.legend()
     plt.show(block=False)
     #print(stat_func(*cleaned_datas))
     return ax
@@ -254,7 +262,7 @@ def plotSNS(df):
 def plotSNS2(df):
     grid = sns.JointGrid(x='pval', y='similarity', data=df)
 
-    g = grid.plot_joint(plt.hexbin,gridsize=(300,50),bins='log',cmap='RdGy',mincnt=1,extent=(-15,0,0,100))
+    g = grid.plot_joint(plt.hexbin,gridsize=(300,50),bins='log',cmap='RdGy',mincnt=1,extent=(-25,0,0,100))
     sns.kdeplot(df['pval'], ax=g.ax_marg_x, legend=False,clip=(-10,0))
     g.ax_marg_x.set_yscale('log')
     g.ax_marg_x.set_ylim(1e-6,1)
@@ -265,11 +273,14 @@ def plotCats(df,ax=None,ls='-'):
     if ax is None:
         f, ax =plt.subplots()
     cmap = plt.get_cmap('tab20')
-    for i in range(11):
+    for i in range(0,3):
         if len(df.loc[df['sg']==i]['pval']) < 10:
             continue
-        sns.distplot(a=df.loc[df['sg']==i]['pval'],bins=np.linspace(-20,0,100),ax=ax,norm_hist=True,color=cmap(i/11),label=i,kde_kws={'ls':ls,'alpha':1})
+        print(len(df.loc[df['sg']==i]['pval']))
+        sns.distplot(a=df.loc[df['sg']==i]['pval'],bins=np.linspace(-50,0,51),ax=ax,norm_hist=True,color=cmap(i/11),label=i,kde=False,kde_kws={'cut':0,'kernel':'epa','bw':.1,'ls':ls},hist_kws={'histtype':'step','alpha':1,'lw':2,'ls':ls})#kde_kws={'ls':ls,'alpha':1})
     plt.yscale('log',nonposy='mask')
     plt.legend()
     plt.show(block=False)
     return ax
+
+

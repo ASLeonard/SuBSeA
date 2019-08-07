@@ -81,6 +81,8 @@ def makeTypes(pdb):
 def readNeedle(pdbs):
     seqs, align = ['', ''], ''
     read = 0
+    similarity = None
+
     with open(BASE_PATH+'NEEDLE/{}_{}_{}_{}.needle'.format(*pdbs)) as file_:
         for line in file_:
             ##can skip empty or commented lines in .needle file
@@ -98,6 +100,7 @@ def readNeedle(pdbs):
             elif read == 1:
                 align += line[21:71].replace(' ','_').strip()
 
+    assert similarity is not None, 'Probable error in needle calculation'
     return seqs, align, similarity
 
 def makeInteractions(type_, seq, chain):
@@ -203,7 +206,7 @@ def generateAssistiveFiles(pdbs,write_intermediates=False):
 
 def pcombine(pvalues):
     if not pvalues or not all(pvalues):
-        return None
+        return 1
     else:
         return scipy.stats.combine_pvalues(pvalues,method='fisher')[1]
 
@@ -220,13 +223,12 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
         
     if matrix_result:
         row_headers,column_headers, matrix = matrix_result
-        print(row_headers, column_headers)
     else:
         column_headers,row_headers, matrix = readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2)
 
     ##trivially no possible matches
     if any(i<2 for i in matrix.shape):
-        return (None,similarity)
+        return (1,similarity)
 
     #pmatrix = np.ones(matrix.shape)
     colsums,rowsums = np.meshgrid(*(np.sum(matrix,axis=I) for I in (1,0)),indexing='ij')
@@ -256,18 +258,26 @@ from multiprocessing import Pool,Manager
 def calculatePvalue(pdb_combination):
     (het,hom) = pdb_combination
     args=(het[:4].upper(),het[5],hom[:4].upper(),hom[5])
-    #try:
-    n_r, m_r = generateAssistiveFiles(args)
-    return (args,MatAlign(*args,needle_result=n_r,matrix_result=m_r))
-    #except Exception as e:
-    #    print(het,hom,e)
-    #    return (args, 'error')
+    try:
+        n_r, m_r = generateAssistiveFiles(args)
+        return (args,MatAlign(*args,needle_result=n_r,matrix_result=m_r))
+    except Exception as e:
+        print(het,hom,e)
+        return (args, 'error')
               
 def paralleliseAlignment(pdb_pairs):
     print('Parellelising alignment')
     results = Manager().dict()
     with Pool() as pool:
-        for (key,p_value) in pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50):
+        for progress, (key,p_value) in enumerate(pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50)):
+            try:
+                if os.path.exists('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key)):
+                    os.remove('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key))
+            except FileNotFoundError:
+                print('File removal error')
+
             results['{}_{}_{}_{}'.format(*key)]=p_value
+            if progress and progress % 5000 == 0:
+                print(f'done another 5k ({progress})')
     print('Finished parallel mapping')
     return results.copy()   

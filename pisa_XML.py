@@ -16,32 +16,27 @@ import shutil
 
 def pullXML(pdb_code_file):
     print('Loading PDB files')
-    pdbs=[]
+    
+    pdbs = []
     with open(pdb_code_file) as file_in:
         for line in file_in:
             pdbs.extend(line.split(', '))
+            
     print(f'Loaded PDB files, there were {len(pdbs)} codes')
-    #    data=json.load(file_in)
-    #    for pairing in data.values():
-    #        for pair in pairing:
-    #            pdbs.extend([id_[:4] for id_ in pair])
 
-
-    URL_base='http://www.ebi.ac.uk/pdbe/pisa/cgi-bin/interfaces.pisa?'
-    PER_CALL=40
+    URL_base = 'http://www.ebi.ac.uk/pdbe/pisa/cgi-bin/interfaces.pisa?'
+    PER_CALL = 40
+    
     print('Downloading XML from EBI')
     for slice_ in range(0,len(pdbs),PER_CALL):
         url=URL_base+','.join(map(str.lower,pdbs[slice_:slice_+PER_CALL]))
         with urllib.request.urlopen(url) as response, open(f'{BASE_PATH}XML/XML_temp.xml', 'wb') as out_file:
             shutil.copyfileobj(response, out_file)
         splitXML(f'{BASE_PATH}XML/XML_temp.xml')
-        print('Split chunk {slice_} into XML_temp.xml')
+        print(f'Split chunk {slice_} into XML_temp.xml')
 
     print('Cleaning temporary files')
     os.remove(BASE_PATH+'XML/XML_temp.xml')
-
-    #with open(BASE_PATH+'XML/xml_list.txt','w') as file_out:
-    #    file_out.write(', '.join(map(str.upper,pdbs)))
 
     print('Parsing individual files')
     parseXML(pdbs)
@@ -54,15 +49,18 @@ def splitXML(input_file):
 
     with open(input_file,'r') as file_:
         for line in file_:
+            
             ##get the pdb id from the code tag
             if '<pdb_code>' in line:
                 pdb_name = line.strip().split('>')[1].split('<')[0]
+                
             ##magic string to indicate given XML depth of interest
             elif line[:2] == '  ' and line[:9] != '  <status':
                 file_string += line[2:]
+                
                 ##end of entry, write to its own file
                 if '</pdb_entry>' in line:
-                    with open(f'{BASE_PATH}XML/{pdb_name}.xml''w') as out_file:
+                    with open(f'{BASE_PATH}XML/{pdb_name}.xml','w') as out_file:
                         out_file.write(file_string)
                     file_string=''
 

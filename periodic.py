@@ -392,7 +392,6 @@ def main(args):
             json.dump(results,f_out)
     else:
         with open('{}_{}_comparison.ND'.format('Table' if args.exec_source else 'PDB', args.file_name or ('domain_match' if args.exec_mode else 'random')),'wb') as f_out:
-            print(np.array(list(results.values()),dtype=float).shape)
             np.array([val for val in results.values() if val!='error'],dtype=float).tofile(f_out)
         
         

@@ -204,11 +204,11 @@ def generateAssistiveFiles(pdbs,write_intermediates=False):
     
 
 
-def pcombine(pvalues):
+def pcombine(pvalues,comb_method='fisher'):
     if not pvalues or not all(pvalues):
         return 1
     else:
-        return scipy.stats.combine_pvalues(pvalues,method='fisher')[1]
+        return scipy.stats.combine_pvalues(pvalues,method=comb_method)[1]
 
 def binomialcdf(n,m1,m2,n1,n2,novg):
     return scipy.stats.binom.sf(n-1,novg,m1*m2/(n1*n2))
@@ -228,7 +228,7 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
 
     ##trivially no possible matches
     if any(i<2 for i in matrix.shape):
-        return (1,similarity)
+        return (1,0,similarity)
 
     #pmatrix = np.ones(matrix.shape)
     colsums,rowsums = np.meshgrid(*(np.sum(matrix,axis=I) for I in (1,0)),indexing='ij')
@@ -248,7 +248,7 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
         else:
             return mins
         
-    return (pcombine(findMinElements(val_matrix)),similarity)
+    return (pcombine(findMinElements(val_matrix),'stouffer'),len(findMinElements(val_matrix)),similarity)
 
 
 

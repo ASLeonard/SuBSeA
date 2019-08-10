@@ -195,14 +195,16 @@ def loadDict(file_ID):
     return json.load(open(f'{file_ID}_comparison.dict','r'))
 
 def loadND(file_ID):
-    return np.fromfile(open(f'{file_ID}_comparison.ND','r')).reshape(-1,2)
+    return np.fromfile(open(f'{file_ID}_comparison.ND','r')).reshape(-1,3)
 
 def loadDF(file_ID,json_save = False):
     raw_data = (loadDict if json_save else loadND)(file_ID) 
     rows = []
     for results in (raw_data.values() if json_save else raw_data):
-        pval, similarity = results
-        rows.append({'pval':pval or 1,'similarity':similarity,'sg':int(similarity//10)})
+        if results == 'error':
+            continue
+        pval, N_hits, similarity = results
+        rows.append({'pval':pval or 1,'similarity':similarity,'sg':int(similarity//5),'hits':N_hits})
         
     df = pd.DataFrame(rows)
     df['pval'] = np.log10(df['pval'])
@@ -213,17 +215,17 @@ def getFrac(data,key):
     print('{:.3f}'.format(vals.count(key)/len(vals))) 
 
 def plotData(datas,ax=None,stat_func=ks_2samp,merge_nones=True):
-    if isinstance(datas,list) and isinstance(datas[0],dict):
-        labels = ['1']*len(datas)
-    else:
-        labels = datas
-        datas = [loadDict(d) for d in labels]
-    if merge_nones:
-        cleaned_datas = [np.log10([val[0] or 1 for val in data.values() if (val!='error' and val[1]<300)]) for data in datas]
-    else:
-        cleaned_datas = [np.log10(list(filter(lambda x: isinstance(x[0],float),data.values()))) for data in datas]
+    #if isinstance(datas,list) and not isinstance(datas[0],str):
+    labels = ['1']*len(datas)
+    #else:
+    #    labels = datas
+    #    datas = [loadDict(d) for d in labels]
+    #if merge_nones:
+    #    cleaned_datas = [np.log10([val[0] or 1 for val in data.values() if (val!='error' and val[1]<300)]) for data in datas]
+    #else:
+    #    cleaned_datas = [np.log10(list(filter(lambda x: isinstance(x[0],float),data.values()))) for data in datas]
     #
-
+    cleaned_datas= datas
     main_range=(-25,0)   
     
     if not ax:
@@ -238,6 +240,7 @@ def plotData(datas,ax=None,stat_func=ks_2samp,merge_nones=True):
         ax.plot(bins[slope_ROI],10**(bins[slope_ROI]*y+b),ls='--',lw=3,c=col2)
 
     for clean_data,label,(col1,col2) in zip(cleaned_datas,labels,(('royalblue','skyblue'),('orangered','coral'),('g','g'),('m','m'),('k','k'))):
+        clean_data=np.log10(clean_data[:,0])
         print(len(clean_data), sum(clean_data<np.log10(.05))/len(clean_data))
         counts, bins, _ = ax.hist(clean_data,range=main_range,bins=100,density=True,histtype='step',color=col1,label=label)
         logSlope(counts,bins)
@@ -259,6 +262,7 @@ def plotSNS(df):
     sns.jointplot(data=df,x='pval',y='similarity',kind='hex',joint_kws={'gridsize':(1000,100),'bins':'log'})
     plt.show(block=False)
 
+    
 def plotSNS2(df):
     grid = sns.JointGrid(x='pval', y='similarity', data=df)
 
@@ -269,18 +273,52 @@ def plotSNS2(df):
     sns.kdeplot(df['similarity'], ax=g.ax_marg_y, vertical=True, legend=False)
     plt.show(block=False)
 
-def plotCats(df,ax=None,ls='-'):
+def plotSNS3(df):
+    grid = sns.JointGrid(x='pval', y='hits', data=df)
+
+    g = grid.plot_joint(plt.hexbin,gridsize=(300,15),bins='log',cmap='RdGy',mincnt=1,extent=(-25,0,0,15))
+    sns.kdeplot(df['pval'], ax=g.ax_marg_x, legend=False,clip=(-10,0))
+    g.ax_marg_x.set_yscale('log')
+    g.ax_marg_x.set_ylim(1e-6,1)
+    sns.kdeplot(df['hits'], ax=g.ax_marg_y, vertical=True, legend=False)
+    plt.show(block=False)
+
+from scipy.stats import brunnermunzel, pareto
+def plotCats(df,ax=None,ls='-',cmap='viridis'):
+    N=6
     if ax is None:
-        f, ax =plt.subplots()
-    cmap = plt.get_cmap('tab20')
-    for i in range(0,3):
+        f, ax =plt.subplots(1,N)
+    cmap = plt.get_cmap(cmap)
+    for i in range(0,N):
         if len(df.loc[df['sg']==i]['pval']) < 10:
             continue
         print(len(df.loc[df['sg']==i]['pval']))
-        sns.distplot(a=df.loc[df['sg']==i]['pval'],bins=np.linspace(-50,0,51),ax=ax,norm_hist=True,color=cmap(i/11),label=i,kde=False,kde_kws={'cut':0,'kernel':'epa','bw':.1,'ls':ls},hist_kws={'histtype':'step','alpha':1,'lw':2,'ls':ls})#kde_kws={'ls':ls,'alpha':1})
-    plt.yscale('log',nonposy='mask')
+        
+        sns.distplot(a=np.clip(df.loc[df['sg']==i]['pval'],-10,0),bins=np.linspace(-10,0,101),ax=ax[i],norm_hist=True,color=cmap(i/(2*N)),label=i,kde=False,kde_kws={'cut':0,'kernel':'epa','ls':ls},hist_kws={'histtype':'step','alpha':1,'lw':2})#kde_kws={'ls':ls,'alpha':1})
+        CfD(df.loc[df['sg']==i]['pval'],ax[i],cmap(i/(2*N)),'--')
+        
+        #fit_p = pareto.fit(-1*np.array(df.loc[df['sg']==i]['pval']))
+        #plt.plot(np.arange(-25,0),pareto(*fit_p).pdf(np.arange(1,26)),'-.')
+        ax[i].set_yscale('log',nonposy='mask')
     plt.legend()
     plt.show(block=False)
     return ax
 
+def CfD(data,ax,c,ls):
+    xs = np.linspace(0, 1, len(data), endpoint=False)
+    data_sorted = np.sort(data)
+    ax.plot(data_sorted,xs,c=c,lw=1,ls=ls,alpha=0.75)
 
+
+def plotGrid(df):
+    df = df.loc[df['sg']<6]
+    df = df.loc[df['hits']>0]
+    df = df.loc[df['hits']<=7]
+    print(len(df))
+    #print(min(df['pval']))
+    #return
+    
+    g = sns.FacetGrid(df, row="sg", col="hits", margin_titles=True,sharex=True,sharey=True)
+    g.map(plt.hist, "pval", color="firebrick", bins=np.linspace(-22,0,201),density=0)
+    g.set(yscale = 'log',ylim=[1,1e5])
+    plt.show(0)

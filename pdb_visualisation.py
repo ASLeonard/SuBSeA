@@ -287,20 +287,24 @@ from scipy.stats import brunnermunzel, pareto
 def plotCats(df,ax=None,ls='-',cmap='viridis'):
     N=6
     if ax is None:
-        f, ax =plt.subplots(1,N)
-    cmap = plt.get_cmap(cmap)
+        f, ax =plt.subplots(3,2)
+    ax= ax.flatten()
+    #cmap = plt.get_cmap(cmap)
     for i in range(0,N):
         if len(df.loc[df['sg']==i]['pval']) < 10:
             continue
         print(len(df.loc[df['sg']==i]['pval']))
+
+        color = cmap#cmap(i/(2*N))
         
-        sns.distplot(a=np.clip(df.loc[df['sg']==i]['pval'],-10,0),bins=np.linspace(-10,0,101),ax=ax[i],norm_hist=True,color=cmap(i/(2*N)),label=i,kde=False,kde_kws={'cut':0,'kernel':'epa','ls':ls},hist_kws={'histtype':'step','alpha':1,'lw':2})#kde_kws={'ls':ls,'alpha':1})
-        CfD(df.loc[df['sg']==i]['pval'],ax[i],cmap(i/(2*N)),'--')
+        sns.distplot(a=np.clip(df.loc[df['sg']==i]['pval'],-10,0),bins=np.linspace(-10,0,101),ax=ax[i],norm_hist=True,color=color,label=i,kde=False,kde_kws={'cut':0,'kernel':'epa','ls':ls},hist_kws={'histtype':'step','alpha':1,'lw':2})#kde_kws={'ls':ls,'alpha':1})
+        CfD(df.loc[df['sg']==i]['pval'],ax[i],color,'--')
         
         #fit_p = pareto.fit(-1*np.array(df.loc[df['sg']==i]['pval']))
         #plt.plot(np.arange(-25,0),pareto(*fit_p).pdf(np.arange(1,26)),'-.')
         ax[i].set_yscale('log',nonposy='mask')
-    plt.legend()
+        ax[i].text(.5,.8,f'{5*i} - {5*(i+1)} % similarity',va='center',ha='center',transform=ax[i].transAxes)
+    #plt.legend()
     plt.show(block=False)
     return ax
 
@@ -309,16 +313,27 @@ def CfD(data,ax,c,ls):
     data_sorted = np.sort(data)
     ax.plot(data_sorted,xs,c=c,lw=1,ls=ls,alpha=0.75)
 
-
+#ff= pd.concat([mp,rp],ignore_index=1)
 def plotGrid(df):
     df = df.loc[df['sg']<6]
     df = df.loc[df['hits']>0]
-    df = df.loc[df['hits']<=7]
-    print(len(df))
-    #print(min(df['pval']))
-    #return
+    df = df.loc[df['hits']<=8]
     
-    g = sns.FacetGrid(df, row="sg", col="hits", margin_titles=True,sharex=True,sharey=True)
-    g.map(plt.hist, "pval", color="firebrick", bins=np.linspace(-22,0,201),density=0)
-    g.set(yscale = 'log',ylim=[1,1e5])
+    #print(len(df))
+
+    match_C = sum(df['match']=='match')
+    random_C = sum(df['match']=='random')
+    
+    drop_samp = np.random.choice(np.arange(match_C,len(df)),size=random_C-match_C,replace=False)
+    print(np.mean(drop_samp))
+    
+    df.drop(df.index[drop_samp],inplace=True)
+
+
+
+    g = sns.FacetGrid(df, row="sg", col="hits",hue='match', margin_titles=True,sharex=True,sharey=True)
+        
+    g.map(plt.hist, "pval", bins=np.linspace(-15,0,201),density=0,histtype='step',alpha=0.75).add_legend()
+    g.set(yscale = 'log',ylim=[1,1e5])#1e-5,1])
+    #return g
     plt.show(0)

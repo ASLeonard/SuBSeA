@@ -81,7 +81,7 @@ def makeTypes(pdb):
 def readNeedle(pdbs):
     seqs, align = ['', ''], ''
     read = 0
-    similarity = None
+    similarity, score = None, None
 
     with open(BASE_PATH+'NEEDLE/{}_{}_{}_{}.needle'.format(*pdbs)) as file_:
         for line in file_:
@@ -89,6 +89,8 @@ def readNeedle(pdbs):
             if line == '\n' or line[0] == '#':
                 if 'Similarity' in line:
                     similarity = float(line[line.find('(')+1 : line.find('%')])
+                elif 'Score' in line:
+                    score = float(line.split()[-1])
                 continue
             
             ll = line.strip().split()
@@ -101,7 +103,7 @@ def readNeedle(pdbs):
                 align += line[21:71].replace(' ','_').strip()
 
     assert similarity is not None, 'Probable error in needle calculation'
-    return seqs, align, similarity
+    return seqs, align, similarity, score
 
 def makeInteractions(type_, seq, chain):
 
@@ -187,7 +189,7 @@ def generateAssistiveFiles(pdbs,write_intermediates=False):
 
     type1 = makeTypes(pdbs[0])
     type2 = makeTypes(pdbs[2])
-    (seq1,seq2),align, similarity = readNeedle(pdbs)
+    (seq1,seq2),align, similarity, score = readNeedle(pdbs)
  
 
     int_1A,int_1B = makeInteractions(type1,seq1,pdbs[1])
@@ -199,7 +201,7 @@ def generateAssistiveFiles(pdbs,write_intermediates=False):
     len_seq1,len_seq2 = (sum(c.isalpha() for c in seq) for seq in (seq1,seq2))
     no_overlap = len_seq1 + len_seq2 - len(align)
     
-    return ((similarity, no_overlap,len_seq1,len_seq2), makePmatrix(pdbs,int_1A,int_1B,int_2A,int_2B,write_intermediates))
+    return ((similarity, no_overlap,len_seq1,len_seq2,score), makePmatrix(pdbs,int_1A,int_1B,int_2A,int_2B,write_intermediates))
 
     
 
@@ -208,6 +210,8 @@ def pcombine(pvalues,comb_method='fisher'):
     if not pvalues or not all(pvalues):
         return 1
     else:
+        if comb_method == 'tippett':
+            return np.min(pvalues)
         return scipy.stats.combine_pvalues(pvalues,method=comb_method)[1]
 
 def binomialcdf(n,m1,m2,n1,n2,novg):
@@ -215,11 +219,14 @@ def binomialcdf(n,m1,m2,n1,n2,novg):
 
 def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
     if needle_result:
-        similarity, noverlap, *length  = needle_result
+        similarity, noverlap, *length, score  = needle_result
+        needle_length = sum(length) - noverlap
     else:
-        (seq1,seq2),align, similarity = readNeedle([pdb_1,chain_1,pdb_2,chain_2])
+        (seq1,seq2),align, similarity, score = readNeedle([pdb_1,chain_1,pdb_2,chain_2])
         length = (sum(c.isalpha() for c in seq) for seq in (seq1,seq2))
         noverlap = sum(length) - len(align)
+        needle_length = len(align)
+        
         
     if matrix_result:
         row_headers,column_headers, matrix = matrix_result
@@ -228,7 +235,8 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
 
     ##trivially no possible matches
     if any(i<2 for i in matrix.shape):
-        return (1,0,similarity)
+        ##REJECT CODE
+        return (1,1,1,0,similarity,score,needle_length,noverlap)
 
     #pmatrix = np.ones(matrix.shape)
     colsums,rowsums = np.meshgrid(*(np.sum(matrix,axis=I) for I in (1,0)),indexing='ij')
@@ -247,8 +255,9 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
             return findMinElements(p_array,mins)
         else:
             return mins
-        
-    return (pcombine(findMinElements(val_matrix),'stouffer'),len(findMinElements(val_matrix)),similarity)
+
+    alignment_scores = findMinElements(val_matrix)
+    return (pcombine(alignment_scores,'fisher'),pcombine(alignment_scores,'stouffer'),pcombine(alignment_scores,'tippett'),len(alignment_scores),similarity,score,needle_length,noverlap)
 
 
 
@@ -262,12 +271,12 @@ def calculatePvalue(pdb_combination):
         n_r, m_r = generateAssistiveFiles(args)
         return (args,MatAlign(*args,needle_result=n_r,matrix_result=m_r))
     except Exception as e:
-        print(het,hom,e)
+        print(het,hom,'!!Error!!:\t',e)
         return (args, 'error')
               
 def paralleliseAlignment(pdb_pairs):
     print('Parellelising alignment')
-    results = Manager().dict()
+    results = Manager().list()
     with Pool() as pool:
         for progress, (key,p_value) in enumerate(pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50)):
             try:
@@ -276,8 +285,11 @@ def paralleliseAlignment(pdb_pairs):
             except FileNotFoundError:
                 print('File removal error')
 
-            results['{}_{}_{}_{}'.format(*key)]=p_value
+            #results['{}_{}_{}_{}'.format(*key)]=p_value
+            if p_value == 'error':
+                continue
+            results.append(p_value)
             if progress and progress % 5000 == 0:
                 print(f'done another 5k ({progress})')
     print('Finished parallel mapping')
-    return results.copy()   
+    return list(results)

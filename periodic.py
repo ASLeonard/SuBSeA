@@ -391,8 +391,11 @@ def main(args):
         with open('{}_{}_comparison.dict'.format('Table' if args.exec_source else 'PDB', args.file_name or ('domain_match' if args.exec_mode else 'random')),'w') as f_out:
             json.dump(results,f_out)
     else:
-        with open('{}_{}_comparison.ND'.format('Table' if args.exec_source else 'PDB', args.file_name or ('domain_match' if args.exec_mode else 'random')),'wb') as f_out:
-            np.array([val for val in results.values() if val!='error'],dtype=float).tofile(f_out)
+        with open(f'{args.file_name}_comparison.csv','w') as f_out:
+            df = pandas.DataFrame(results)
+            df.columns = ['pval_F','pval_S','pval_T','hits','similarity','score','align_length','overlap']
+            df.to_csv(f_out,index=False,columns=['pval_F','pval_S','pval_T','hits','similarity','score','align_length','overlap'])
+            #np.array([val for val in results.values() if val!='error'],dtype=float).tofile(f_out)
         
         
 if __name__ == "__main__":

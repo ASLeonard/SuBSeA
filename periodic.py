@@ -205,9 +205,10 @@ def newEPS(df_HET, df_HOM, N_SAMPLE_LIMIT,match_partials=True):
         if not match_partials and sampled_domain_HET == sampled_domain_HOM:
             continue
         
-        if match_partials and any(darch in sampled_domain_HOM for darch in anti_HET[chain_HET[:4]][chain_HET[5]]):
+        if match_partials and any(darch in anti_HOM[chain_HOM[:4]][chain_HOM[5]] for darch in anti_HET[chain_HET[:4]][chain_HET[5]]):
             continue
-        
+
+            
         yielded_samples += 1
         yield (chain_HET,chain_HOM)
         
@@ -229,7 +230,7 @@ def generateAntiDomains(df):
                 antis[edge] |= {arch for chain in interaction.split('-') for arch in domains[chain]}
 
         ##if the subunit has no domains, don't include ones it interacts with either
-        anti_domains[pdb] = {k:v for k,v in antis.items() if v and k in domains}
+        anti_domains[pdb] = dict(antis)#{k:v for k,v in antis.items() if v and k in domains}
     return anti_domains
         
     
@@ -391,10 +392,10 @@ def main(args):
         with open('{}_{}_comparison.dict'.format('Table' if args.exec_source else 'PDB', args.file_name or ('domain_match' if args.exec_mode else 'random')),'w') as f_out:
             json.dump(results,f_out)
     else:
-        with open(f'{args.file_name}_comparison.csv','w') as f_out:
+        with open(f'/rscratch/asl47/PDB_results/{args.file_name}_comparison.csv','w') as f_out:
             df = pandas.DataFrame(results)
-            df.columns = ['pval_F','pval_S','pval_T','hits','similarity','score','align_length','overlap']
-            df.to_csv(f_out,index=False,columns=['pval_F','pval_S','pval_T','hits','similarity','score','align_length','overlap'])
+            df.columns = ['id','pval_F','pval_S','pval_T','hits','similarity','score','align_length','overlap']
+            df.to_csv(f_out,index=False,columns=['id','pval_F','pval_S','pval_T','hits','similarity','score','align_length','overlap'])
             #np.array([val for val in results.values() if val!='error'],dtype=float).tofile(f_out)
         
         

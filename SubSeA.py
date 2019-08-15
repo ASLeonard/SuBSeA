@@ -82,7 +82,7 @@ def readNeedle(pdbs):
     seqs, align = ['', ''], ''
     read = 0
     similarity, score = None, None
-
+#'/rscratch/asl47/liv_a.needle' or
     with open(BASE_PATH+'NEEDLE/{}_{}_{}_{}.needle'.format(*pdbs)) as file_:
         for line in file_:
             ##can skip empty or commented lines in .needle file
@@ -214,8 +214,8 @@ def pcombine(pvalues,comb_method='fisher'):
             return np.min(pvalues)
         return scipy.stats.combine_pvalues(pvalues,method=comb_method)[1]
 
-def binomialcdf(n,m1,m2,n1,n2,novg):
-    return scipy.stats.binom.sf(n-1,novg,m1*m2/(n1*n2))
+def binomialcdf(n,m1,m2,n1,n2,novg,N_FACTOR=True):
+    return scipy.stats.binom.sf(n-N_FACTOR,novg,m1*m2/(n1*n2))
 
 def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
     if needle_result:
@@ -230,8 +230,10 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
         
     if matrix_result:
         row_headers,column_headers, matrix = matrix_result
+
     else:
         column_headers,row_headers, matrix = readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2)
+
 
     ##trivially no possible matches
     if any(i<2 for i in matrix.shape):
@@ -239,10 +241,11 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
         return (1,1,1,0,similarity,score,needle_length,noverlap)
 
     #pmatrix = np.ones(matrix.shape)
+
     colsums,rowsums = np.meshgrid(*(np.sum(matrix,axis=I) for I in (1,0)),indexing='ij')
     
 
-    pmatrix = binomialcdf(matrix,rowsums,colsums,*length,novg=noverlap)
+    pmatrix = binomialcdf(matrix,rowsums,colsums,*length,novg=noverlap,N_FACTOR=False)
 
     val_matrix=pmatrix[1:,1:].copy()
 
@@ -288,8 +291,8 @@ def paralleliseAlignment(pdb_pairs):
             #results['{}_{}_{}_{}'.format(*key)]=p_value
             if p_value == 'error':
                 continue
-            results.append(p_value)
-            if progress and progress % 5000 == 0:
-                print(f'done another 5k ({progress})')
+            results.append((key,)+p_value)
+            if progress and progress % 50000 == 0:
+                print(f'done another 50k ({progress})')
     print('Finished parallel mapping')
     return list(results)

@@ -139,14 +139,14 @@ def getDomainPWeights(domains,samples=None):
 def RPS_wrapper(df_HET, df_HOM, N_SAMPLE_LIMIT,match_partials=False):
 
     unique_comparisons = set()
-    RPS = newRPS(df_HET, df_HOM, N_SAMPLE_LIMIT,match_partials)
+    RPS = newRPS(df_HET, df_HOM, match_partials)
 
     while len(unique_comparisons) < N_SAMPLE_LIMIT:
         unique_comparisons.add(next(RPS))
     return unique_comparisons
         
 
-def newRPS(df_HET, df_HOM, N_SAMPLE_LIMIT,match_partials=False):
+def newRPS(df_HET, df_HOM, match_partials=False):
     inverted_domains_HET = invertCSVDomains(df_HET,match_partials)
     inverted_domains_HOM = invertCSVDomains(df_HOM,match_partials)
 
@@ -180,49 +180,56 @@ def newFPS(df_HET, df_HOM,match_partials=False):
                 continue
             yield (chain_HET,chain_HOM)
 
-def newEPS(df_HET, df_HOM, N_SAMPLE_LIMIT,match_partials=True):
-    inverted_domains_HET = invertCSVDomains(df_HET,match_partials)
-    inverted_domains_HOM = invertCSVDomains(df_HOM,match_partials)
+def getUniqueChains(df):
+    pdb_chains = []
 
-    anti_HET = generateAntiDomains(df_HET)
-    anti_HOM = generateAntiDomains(df_HOM)
 
-    weights_HET = getDomainPWeights(inverted_domains_HET)
-    weights_HOM = getDomainPWeights(inverted_domains_HOM)
+    for _,row in df.iterrows():
+        interactions = row['interfaces']
+        chains = {chain for interaction in interactions for chain in interaction.split('-')}
+        pdb_chains.extend([f"{row['PDB_id']}_{chain}" for chain in chains])
 
-    yielded_samples = 0
-    while yielded_samples < N_SAMPLE_LIMIT:
-        sampled_domain_HET = choice(list(inverted_domains_HET),p=weights_HET)
-        chain_HET = choice(inverted_domains_HET[sampled_domain_HET])
-        
-        sampled_domain_HOM = choice(list(inverted_domains_HOM),p=weights_HOM)
-        chain_HOM = choice(inverted_domains_HOM[sampled_domain_HOM])
+    return pdb_chains
+    
+def EPS_wrapper(df_HET, df_HOM, N_SAMPLE_LIMIT,):
+
+    unique_comparisons = set()
+    EPS = newEPS(df_HET, df_HOM)
+
+    while len(unique_comparisons) < N_SAMPLE_LIMIT:
+        unique_comparisons.add(next(EPS))
+    return unique_comparisons
+
+def newEPS(df_HET, df_HOM):
+    het_options, hom_options = getUniqueChains(df_HET), getUniqueChains(df_HOM)
+
+    anti_domains = generateAntiDomains(df_HET,df_HOM)
+    while True:
+
+        chain_HET = choice(het_options)
+        chain_HOM = choice(hom_options)
         
         if chain_HET == chain_HOM:
             #print('Self-compare, skip')
             continue
 
-        if not match_partials and sampled_domain_HET == sampled_domain_HOM:
-            continue
-        
-        if match_partials and any(darch in anti_HOM[chain_HOM[:4]][chain_HOM[5]] for darch in anti_HET[chain_HET[:4]][chain_HET[5]]):
+        if any(arch in anti_domains[chain_HOM[:4]][chain_HOM[5]] for arch in anti_domains[chain_HET[:4]][chain_HET[5]]):
             continue
 
-            
-        yielded_samples += 1
         yield (chain_HET,chain_HOM)
-        
-    return
 
     
-def generateAntiDomains(df):
+def generateAntiDomains(df,df2):
     anti_domains = {}
 
-    for _, row in df.iterrows():
-        pdb = row['PDB_id']
-        domains = row['domains']
+    for pdb in set(df['PDB_id']).union(set(df2['PDB_id'])):
+        domains, interactions = {}, []
 
-        interactions = row['interfaces']
+        for frame in (df,df2):
+            data = frame.loc[frame['PDB_id']==pdb]
+            if not data.empty:
+                domains = {**domains, **data.iloc[0]['domains']}
+                interactions.extend(data.iloc[0]['interfaces'])
        
         antis = defaultdict(set)
         for interaction in interactions:
@@ -349,17 +356,10 @@ def chainMap():
 
 
 def main(args):
-    #if args.exec_source:
-    #    print('Loading periodic data')
-    #    df = loadCSV('Periodic_heteromers_C.csv')
-    #else:
-    #    print('Loading PDB heterodimer data')
-    #    df = loadCSV('PDB_heterodimers.csv')
 
     df = loadCSV('New_heteromersR.csv')
     df2 = loadCSV('New_homomersR.csv')
 
-    #checkINTExisting(df,df2)
 
     if args.exec_mode == 'match':
         if args.N_samples is None:
@@ -370,13 +370,13 @@ def main(args):
             proteinGenerator = RPS_wrapper(df,df2,args.N_samples,args.allow_partials)
     else:
         print('Sampling anti-domain enforced comparisons')
-        proteinGenerator = newEPS(df,df2,args.N_samples,args.allow_partials)
+        proteinGenerator = EPS_wrapper(df,df2,args.N_samples)
         
     if args.exec_style:
         results = paralleliseAlignment(proteinGenerator)
     else:
         print('Running sequentially')
-        results = {}
+        results = []
         for pdb in proteinGenerator:
             try:
                 single_result = calculatePvalue(pdb)
@@ -385,7 +385,7 @@ def main(args):
                 print('Error on {}'.format(pdb),err)
             
 
-            results['{}_{}_{}_{}'.format(*single_result[0])] = single_result[1]
+            results.append((single_result[0],)+single_result[1])
   
 
     if args.json:

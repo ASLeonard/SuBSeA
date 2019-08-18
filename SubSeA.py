@@ -289,9 +289,9 @@ def paralleliseAlignment(pdb_pairs):
                 print('File removal error')
 
             #results['{}_{}_{}_{}'.format(*key)]=p_value
-            if p_value == 'error':
-                continue
-            results.append((key,)+p_value)
+            if p_value != 'error':
+                results.append((key,)+p_value)
+                
             if progress and progress % 50000 == 0:
                 print(f'done another 50k ({progress})')
     print('Finished parallel mapping')

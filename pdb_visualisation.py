@@ -214,7 +214,7 @@ def loadDF(file_ID,json_save = False,csv_save=False):
 
 def loadALL(sample=None,rscratch=False):
     rscratch = '/rscratch/asl47/PDB_results/' if rscratch else ''
-    DFs = [loadDF(f'{rscratch}NEWER_{NAME}',csv_save=True) for NAME in ('match_partial',)]#('match','match_partial','random','random_partial')]
+    DFs = [loadDF(f'{rscratch}NEWER_{NAME}',csv_save=True) for NAME in ('match','match_partial','random','random_partial1')]
     if sample:
         for i in range(len(DFs)):
             DFs[i] = DFs[i].sample(sample)

@@ -73,6 +73,7 @@ def makeTypes(pdb):
                 if len(interactions) != 2 or abs(interactions[0][2]-interactions[1][2]) >= similaritythresh or interactions[0][0] != interactions[1][1] or interactions[0][1] != interactions[1][0]: 
                     interactions.sort(key=itemgetter(2),reverse=True)
                     
+                    
                 type_[chain+res] = tuple(reversed(interactions[0][0].split('_')))
     return type_
         
@@ -268,20 +269,26 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
 from multiprocessing import Pool,Manager
 
 def calculatePvalue(pdb_combination):
-    (het,hom) = pdb_combination
+    (het,hom,code) = pdb_combination
     args=(het[:4].upper(),het[5],hom[:4].upper(),hom[5])
     try:
         n_r, m_r = generateAssistiveFiles(args)
-        return (args,MatAlign(*args,needle_result=n_r,matrix_result=m_r))
+        return ((args,code),MatAlign(*args,needle_result=n_r,matrix_result=m_r))
     except Exception as e:
         print(het,hom,'!!Error!!:\t',e)
-        return (args, 'error')
-              
-def paralleliseAlignment(pdb_pairs):
+        return ((args,code), 'error')
+
+import csv
+def paralleliseAlignment(pdb_pairs,file_name):
     print('Parellelising alignment')
+
+    columns = ['id','code','pval_F','pval_S','pval_T','hits','similarity','score','align_length','overlap']
+    
     results = Manager().list()
-    with Pool() as pool:
-        for progress, (key,p_value) in enumerate(pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50)):
+    with Pool() as pool, open(f'/rscratch/asl47/PDB_results/{file_name}_comparison.csv','w', newline='') as csvfile:
+        f_writer = csv.writer(csvfile)
+        f_writer.writerow(columns)
+        for progress, ((key,code),p_value) in enumerate(pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50)):
             try:
                 if os.path.exists('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key)):
                     os.remove('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key))
@@ -290,7 +297,10 @@ def paralleliseAlignment(pdb_pairs):
 
             #results['{}_{}_{}_{}'.format(*key)]=p_value
             if p_value != 'error':
-                results.append((key,)+p_value)
+                f_writer.writerow(['{}_{}_{}_{}'.format(*key),code]+[f'{n:.2e}' if isinstance(n,float) else str(n) for n in p_value])
+                
+
+                #results.append(('{}_{}_{}_{}'.format(*key),code)+p_value)
                 
             if progress and progress % 50000 == 0:
                 print(f'done another 50k ({progress})')

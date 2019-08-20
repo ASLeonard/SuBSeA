@@ -16,113 +16,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from itertools import combinations,product
 
-def overlaps(df):
-    rows = []
-
-    for _,row in df.iterrows():
-        for pair in row['interfaces']: #combinations(row['domains'].keys()):
-            if isinstance(row['BSAs'],str):
-                try:
-                    row['BSAs'] = eval(row['BSAs'])
-                except:
-                    print(type(row['BSAs']))
-                    print("ERR",row['BSAs'])
-            #),['C-D'],pair,type(pair))
-            #row['BSAs'][pair])#domainMatch(row['domains'],*pair.split('-')))
-            try:
-                rows.append({'id':row['PDB_id']+'_'+str(pair),'shared':domainMatch(row['domains'],*pair.split('-')),'BSA':row['BSAs'][pair]})
-            except:
-                print(row)
-
-    print('concant')
-    return pandas.DataFrame(rows)
-            
-
-def readHeteromers(file_path='~/Downloads/PeriodicTable.csv'):
-    return pandas.read_csv(file_path)
-
-def domainStrictness():
-    pass
-
 def scrapePDBs(df):
     with open('period_pdb_codes.txt', 'w') as file_out:
           file_out.write(', '.join(df['PDB ID']))
-
-def heteromerHomodimerOverlap(df,periodic=True,H_max=None):
-    key_interfaces = 'List of interface types (all identical subunits are given the same code)'
-    key_reduced = 'Interfaces included in the reduced topology (1 - yes; 0 - no)'
-
-    inverted_homodimer_domains = invertDomains(readDomains('HCath'))
-    ALL_domains = readDomains('CATH-B' if periodic else 'CATH')
-    chain_map = chainMap()
-
-    counts,uc = [], []
-    #fs=[]
-    
-    for (unique_archs, unique_counts) in getUniqueHomodimerDomains(H_max):
-        if unique_archs not in inverted_homodimer_domains:
-            continue
-        uc.append(unique_counts)
-        count, total = 0,0
-
-        for _, row in df.iterrows():
-            pdb = row['PDB ID'] if periodic else row['id'][:4]
-            domains = ALL_domains[pdb]
-
-            interactions = {edge for pair, active in zip(row[key_interfaces].split(','),row[key_reduced].split(',')) if (pair[0]!=pair[2] and active == '1') for edge in pair.split('-') } if periodic else row['chains']
-
-
-            for edge in interactions:
-                total+=1
-                ##return elabel domains if needed
-                if pdb in chain_map and edge in chain_map[pdb]:
-                    edge = chain_map[pdb][edge]
-                if not domains:
-                    continue
-                ##no information on this subunit for domains
-                if edge not in domains:
-                    #fs.append('{}_{}'.format(pdb.upper(),edge))
-                    continue
-            
-                if tuple(domains[edge]) == unique_archs:
-                    count+=1
-        #return fs
-        counts.append(count)
-        
-    return {'matches':counts,'h_count':uc,'total':total}
-
-def visualiseOverlap(data_in):
-    data_raw = json.load(open(data_in,'r'))
-
-
-    f, (ax1,ax2) = plt.subplots(2,1)
-    
-
-    total = data_raw['total']
-    
-    ax1.scatter(range(len(data_raw['matches'])),np.cumsum(data_raw['matches']),c=np.log10(data_raw['h_count']),cmap='viridis')
-    ax1.set_xticks([])
-    ax1.set_xlabel(r'$\leftarrow$ most common homodimer domain')
-    ax1.set_ylabel('# matched heteromeric subunits')
-    for cut in (.5,.75,.95):
-        ax1.text(np.where(h>cut*np.sum(h))[0][0], 0, str(cut), fontsize=12)
-    ax1t = ax1.twinx()
-    ax1t.plot(np.cumsum(data_raw['matches'])/data_raw['total'],ls='--')
-    ax1t.set_xticks([])
-    #ax1t.set_ylims([0,np.cumsum(data_raw['matches'])])
-    ax1t.set_ylabel('fraction of all matches')
-
-
-    c = Counter(data_raw['matches'])
-    cols=np.log10([sum(data_raw['h_count'][i] for i,j in enumerate(data_raw['matches']) if j==key) for key in sorted(c.keys())])
-    
-    ax2.scatter(sorted(c.keys()),[c[k] for k in sorted(c.keys())],c=cols,cmap='plasma',edgecolors='k')
-    ax2.set_yscale('log')
-    ax2.set_xscale('symlog')
-    ax2.set_xlabel('# matched heteromeric subunits')
-    ax2.set_ylabel('frequency')
-    plt.show(block=False)
-
 
 def checkINTExisting(df_HET, df_HOM):
     for clean_df in (df_HET, df_HOM):
@@ -161,7 +57,7 @@ def newRPS(df_HET, df_HOM, match_partials=False):
         chain_HET = choice(inverted_domains_HET[sampled_domain])
         chain_HOM = choice(inverted_domains_HOM[sampled_domain])
         
-        if chain_HET == chain_HOM:
+        if chain_HET[:4] == chain_HOM[:4]:
             #print('Self-compare, skip')
             continue
         yield (chain_HET,chain_HOM)
@@ -176,13 +72,115 @@ def newFPS(df_HET, df_HOM,match_partials=False):
         
         for (chain_HET,chain_HOM) in product(inverted_domains_HET[sampled_domain],inverted_domains_HOM[sampled_domain]):
         
-            if chain_HET == chain_HOM:
+            if chain_HET[:4] == chain_HOM[:4]:
                 continue
             yield (chain_HET,chain_HOM)
 
+from collections import Counter
+def duplicateIntersection(domain_1, domain_2):
+    overlap = Counter(domain_1) & Counter(domain_2)
+    return tuple(dom for dom in sorted(overlap.elements()))
+
+def sharedMatchingAlgorithm(df_HET, df_HOM):
+    inverted_domains_HOM_full = invertCSVDomains(df_HOM)
+    inverted_domains_HOM_partial = invertCSVDomains(df_HOM,True)
+
+    
+    comparisons_to_make = []
+
+    for _, row in df_HET.iterrows():
+
+        mutual_comparisons, matched_comparisons = set(), set()
+        partial_comparisons_S, full_comparisons_S = set(), set()
+        partial_comparisons_N, full_comparisons_N = set(), set()
+
+        
+        pdb = row['PDB_id']
+        domains = row['domains']
+
+        interactions = row['interfaces']
+        flat_chains = {chain for interaction in interactions for chain in interaction.split('-')}
+
+        partner_domains = defaultdict(dict)
+
+        
+        for flat_chain in flat_chains:
+            chain_domains = domains[flat_chain]
+            ## mutual overlaps
+            for interaction in interactions:
+                if flat_chain not in interaction:
+                    continue
+                for edge in interaction.split('-'):
+                    if edge == flat_chains:
+                        continue
+
+                    mutual_domains = duplicateIntersection(chain_domains,domains[edge])
+                    if mutual_domains:
+                        if mutual_domains in inverted_domains_HOM_full:
+                            for pdb_hom in inverted_domains_HOM_full[mutual_domains]:
+                                if pdb_hom[:4] != pdb:
+                                    if len(mutual_domains) == len(chain_domains):
+                                        matched_comparisons.add((f'{pdb}_{flat_chain}',pdb_hom))
+                                    else:
+                                        mutual_comparisons.add((f'{pdb}_{flat_chain}',pdb_hom))
+                    else:
+                        if domains[edge] in inverted_domains_HOM_full:
+                            for pdb_hom in inverted_domains_HOM_full[domains[edge]]:
+                                if pdb_hom[:4] != pdb:
+                                    full_comparisons_N.add((f'{pdb}_{flat_chain}',pdb_hom))
+                        if len(domains[edge]) >= 2:
+                            for domain in domains[edge]:
+                                if domain in inverted_domains_HOM_partial:
+                                    for pdb_hom in inverted_domains_HOM_partial[domain]:
+                                        if pdb_hom[:4] != pdb and (f'{pdb}_{flat_chain}',pdb_hom) not in full_comparisons_N:
+                                            partial_comparisons_N.add((f'{pdb}_{flat_chain}',pdb_hom))
+                                                           
+
+            ## per full chain domain comparisons
+
+            if chain_domains in inverted_domains_HOM_full:
+                for pdb_hom in inverted_domains_HOM_full[chain_domains]:
+                    if pdb_hom[:4] == pdb:
+                        continue
+                    comp_tuple = (f'{pdb}_{flat_chain}',pdb_hom)
+                    if comp_tuple not in matched_comparisons:
+                        full_comparisons_S.add(comp_tuple)
+
+            ## partial comparisons
+            if len(chain_domains) >= 2:
+                for chain_domain in chain_domains:
+                    if chain_domain in inverted_domains_HOM_partial:
+                        for pdb_hom in inverted_domains_HOM_partial[chain_domain]:
+                            if pdb_hom[:4] == pdb:
+                                continue
+                            comp_tuple = (f'{pdb}_{flat_chain}',pdb_hom)
+                            if comp_tuple not in full_comparisons_S and comp_tuple not in mutual_comparisons and comp_tuple not in matched_comparisons:
+                                partial_comparisons_S.add(comp_tuple)
+                    
+
+        #filter out mistakes
+        full_comparisons_N -= full_comparisons_S
+        partial_comparisons_N -= partial_comparisons_S
+        partial_comparisons_N -= full_comparisons_N
+        
+        for data, code in zip((matched_comparisons,mutual_comparisons,full_comparisons_S,full_comparisons_N,partial_comparisons_S,partial_comparisons_N),('MF','MP','FS','FN','PS','PN')):
+            comparisons_to_make.extend([comp+(code,) for comp in data])
+
+    return comparisons_to_make
+        
+def doubleEntries(comps,sorted_mode=False):
+    codes= set()
+    types= {}
+    for comp in comps:
+        val = tuple(sorted((comp[0],comp[1]))) if sorted_mode else (comp[0],comp[1])
+        if val not in codes:
+            codes.add(val)
+            types[val]=comp[2]
+        elif types[val]!=comp[2]:
+            print(types[val],comp[2],val)
+
 def getUniqueChains(df):
     pdb_chains = []
-
 
     for _,row in df.iterrows():
         interactions = row['interfaces']
@@ -209,7 +207,7 @@ def newEPS(df_HET, df_HOM):
         chain_HET = choice(het_options)
         chain_HOM = choice(hom_options)
         
-        if chain_HET == chain_HOM:
+        if chain_HET[:4] == chain_HOM[:4]:
             #print('Self-compare, skip')
             continue
 
@@ -362,18 +360,21 @@ def main(args):
 
 
     if args.exec_mode == 'match':
-        if args.N_samples is None:
-            print('Exhaustive iterating domain matched comparisons')
-            proteinGenerator = newFPS(df,df2,args.allow_partials)
-        else:
-            print('Sampling domain matched comparisons')
-            proteinGenerator = RPS_wrapper(df,df2,args.N_samples,args.allow_partials)
+        proteinGenerator = sharedMatchingAlgorithm(df,df2)
+        if args.N_samples:
+            proteinGenerator = [proteinGenerator[index] for index in choice(len(proteinGenerator),replace=False,size=args.N_samples)]
+        #if args.N_samples is None:
+        #    print('Exhaustive iterating domain matched comparisons')
+        #    proteinGenerator = newFPS(df,df2,args.allow_partials)
+        #else:
+        #    print('Sampling domain matched comparisons')
+        #    proteinGenerator = RPS_wrapper(df,df2,args.N_samples,args.allow_partials)
     else:
         print('Sampling anti-domain enforced comparisons')
         proteinGenerator = EPS_wrapper(df,df2,args.N_samples)
         
     if args.exec_style:
-        results = paralleliseAlignment(proteinGenerator)
+        results = paralleliseAlignment(proteinGenerator,args.file_name)
     else:
         print('Running sequentially')
         results = []
@@ -392,10 +393,12 @@ def main(args):
         with open('{}_{}_comparison.dict'.format('Table' if args.exec_source else 'PDB', args.file_name or ('domain_match' if args.exec_mode else 'random')),'w') as f_out:
             json.dump(results,f_out)
     else:
+        return
+        columns = ['id','code','pval_F','pval_S','pval_T','hits','similarity','score','align_length','overlap']
         with open(f'/rscratch/asl47/PDB_results/{args.file_name}_comparison.csv','w') as f_out:
             df = pandas.DataFrame(results)
-            df.columns = ['id','pval_F','pval_S','pval_T','hits','similarity','score','align_length','overlap']
-            df.to_csv(f_out,index=False,columns=['id','pval_F','pval_S','pval_T','hits','similarity','score','align_length','overlap'])
+            df.columns = columns
+            df.to_csv(f_out,index=False,columns=columns)
             #np.array([val for val in results.values() if val!='error'],dtype=float).tofile(f_out)
         
         

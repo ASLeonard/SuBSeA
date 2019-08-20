@@ -9,7 +9,7 @@ import numpy as np
 from itertools import product
 from scipy.stats import linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp
 
-from periodic import loadCSV,overlaps
+from periodic import loadCSV
 
 from domains import readDomains, domainMatch
 
@@ -34,7 +34,7 @@ def scrubInput(run_name,local_alignment=True,similarity=True,domain='SCOP'):
 
     domain_dict=readDomains(domain)
     #homomer_domains=getUniqueHomodimerDomains(100)
-
+    
           
     for result in glob.glob('/scratch/asl47/PDB/results/{}/*.results'.format(run_name)):
         d={'id':result.split('.')[0].split('/')[-1].lower()}
@@ -212,9 +212,15 @@ def loadDF(file_ID,json_save = False,csv_save=False):
     df['pval'] = np.log10(df['pval'])
     return df
 
-def loadALL(sample=None,rscratch=False):
+def splitData(df,thresh=80):
+    f80 = df.loc[(df['match']=='M') & (df['similarity']<thresh)]
+    M80 = df.loc[(df['match']=='MP') & (df['similarity']<thresh)]
+    R80 = df.loc[(df['match']=='RP') & (df['similarity']<thresh)]
+    return f80,M80,R80
+
+def loadALL(sample=None,rscratch=True):
     rscratch = '/rscratch/asl47/PDB_results/' if rscratch else ''
-    DFs = [loadDF(f'{rscratch}NEWER_{NAME}',csv_save=True) for NAME in ('match','match_partial','random','random_partial1')]
+    DFs = [loadDF(f'{rscratch}{NAME}',csv_save=True) for NAME in ('Alpha3',)]#('match','match_partial','random','random_partial')]
     if sample:
         for i in range(len(DFs)):
             DFs[i] = DFs[i].sample(sample)
@@ -290,19 +296,22 @@ def plotSNS(df):
     
 def plotSNS2(df,X_C='pval_F',Y_C='similarity'):
 
-    extent_codes = {'pval_F':(-90,0),'pval_S':(-80,0),'pval_T':(-50,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
+    extent_codes = {'pval_F':(-90,0),'pval_S':(-80,0),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
     grid = sns.JointGrid(x=X_C, y=Y_C, data=df)
     print(min(df[X_C]))
 
-    g = grid.plot_joint(plt.hexbin,gridsize=(100,100),bins='log',cmap='RdGy',mincnt=1,extent=extent_codes[X_C]+extent_codes[Y_C])
-    sns.kdeplot(df[X_C], ax=g.ax_marg_x, legend=False,kernel='epa',clip=extent_codes[X_C],cut=0)
+    g = grid.plot_joint(plt.hexbin,gridsize=(100,100),bins='log',cmap='cividis',mincnt=1,extent=extent_codes[X_C]+extent_codes[Y_C])
+
+    g = g.plot_marginals(sns.distplot, kde=True, color="m",kde_kws={'cut':0,'kernel':'epa','bw':.05})
+    
     g.ax_marg_x.set_yscale('log')
-    g.ax_marg_x.set_ylim(1e-6,1)
-    sns.kdeplot(df[Y_C], ax=g.ax_marg_y, vertical=True, legend=False,cut=0,clip=extent_codes[Y_C])
+    g = g.annotate(kendalltau,loc="center left")
+    plt.colorbar()
+
     plt.show(block=False)
 
 
-from scipy.stats import brunnermunzel, pareto
+from scipy.stats import brunnermunzel, pareto, pearsonr, spearmanr,kendalltau,theilslopes
 def plotCats(df,ax=None,ls='-',cmap='green',pval_type=''):
     N=6
     if ax is None:
@@ -375,4 +384,21 @@ def explore(df,filter_fails=True):
     #g.map_lower(sns.kdeplot,n_levels=10,gridsize=100,bw=.05)
     g.add_legend()
     
+    plt.show(0)
+
+from matplotlib.colors import LogNorm
+def hexbin(x, y, color, **kwargs):
+    cmap = plt.get_cmap('cividis')
+    #cmap = sns.light_palette(color, as_cmap=True)
+    plt.hexbin(x, y, cmap=cmap, **kwargs)
+    plt.text(-70,.1,len(x),ha='left',va='bottom')
+
+def hexIT(df,X_C='pval_F',Y_C='similarity',sim_thresh=100):
+    extent_codes = {'pval_F':(-90,0),'pval_S':(-80,0),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
+
+    df = df.loc[df['similarity'] <= sim_thresh]
+    g = sns.FacetGrid(df,hue="code", col="code", height=4,col_wrap=3,col_order=['MF','MP','FS','PS','FN','PN'])
+    
+    g.map(hexbin, X_C, Y_C, bins='log',gridsize=(100,100),mincnt=1,extent=extent_codes[X_C]+extent_codes[Y_C])
+
     plt.show(0)

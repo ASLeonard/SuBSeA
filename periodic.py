@@ -87,7 +87,7 @@ def sharedMatchingAlgorithm(df_HET, df_HOM):
 
     
     comparisons_to_make = []
-
+    ss=0
     for _, row in df_HET.iterrows():
 
         mutual_comparisons, matched_comparisons = set(), set()
@@ -103,19 +103,21 @@ def sharedMatchingAlgorithm(df_HET, df_HOM):
 
         partner_domains = defaultdict(dict)
 
-        
+        shared=[]
         for flat_chain in flat_chains:
             chain_domains = domains[flat_chain]
             ## mutual overlaps
+            
             for interaction in interactions:
                 if flat_chain not in interaction:
                     continue
                 for edge in interaction.split('-'):
-                    if edge == flat_chains:
+                    if edge == flat_chain:
                         continue
 
                     mutual_domains = duplicateIntersection(chain_domains,domains[edge])
                     if mutual_domains:
+                        shared.append((flat_chain,edge))
                         if mutual_domains in inverted_domains_HOM_full:
                             for pdb_hom in inverted_domains_HOM_full[mutual_domains]:
                                 if pdb_hom[:4] != pdb:
@@ -157,7 +159,9 @@ def sharedMatchingAlgorithm(df_HET, df_HOM):
                             if comp_tuple not in full_comparisons_S and comp_tuple not in mutual_comparisons and comp_tuple not in matched_comparisons:
                                 partial_comparisons_S.add(comp_tuple)
                     
-
+        #print(pdb,shared)
+        if shared:
+            ss+=1
         #filter out mistakes
         full_comparisons_N -= full_comparisons_S
         partial_comparisons_N -= partial_comparisons_S
@@ -165,7 +169,7 @@ def sharedMatchingAlgorithm(df_HET, df_HOM):
         
         for data, code in zip((matched_comparisons,mutual_comparisons,full_comparisons_S,full_comparisons_N,partial_comparisons_S,partial_comparisons_N),('MF','MP','FS','FN','PS','PN')):
             comparisons_to_make.extend([comp+(code,) for comp in data])
-
+    print('Shared domains on ',ss)
     return comparisons_to_make
         
 def doubleEntries(comps,sorted_mode=False):

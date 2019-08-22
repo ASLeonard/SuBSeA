@@ -89,7 +89,7 @@ def convertH(df):
 
     return pd.DataFrame(rows)
 
-def plotDataX(data,stat_func=mannwhitneyu):
+def plotDataX(data,stat_func=brunnermunzel):
     #g=sns.regplot(x="TM", y="BSA", data=data)                  
     #g = sns.violinplot(y="BSA",data=low)#xlim=(0,1))
     #plt.figure()
@@ -97,7 +97,7 @@ def plotDataX(data,stat_func=mannwhitneyu):
     #g2 = sns.jointplot(x="TM", y="BSA",data=data,xlim=(0,1))
     #sns.relplot(x='TM', y='BSA', size="BSA",sizes=(40, 400),hue='domain', alpha=.75, height=6, data=data)
     plt.figure()
-    ax = sns.violinplot(x="shared", y="BSA", data=data, palette="muted",split=False,  scale="count",scale_hue=True,inner="quartile",cut=0,bw=.3)
+    ax = sns.violinplot(x="shared", y="BSA", data=data, palette="muted",split=False,  scale="width",scale_hue=True,inner="quartile",cut=0,bw=.3)
 
     
     plt.show(block=False)
@@ -220,7 +220,7 @@ def splitData(df,thresh=80):
 
 def loadALL(sample=None,rscratch=True):
     rscratch = '/rscratch/asl47/PDB_results/' if rscratch else ''
-    DFs = [loadDF(f'{rscratch}{NAME}',csv_save=True) for NAME in ('Alpha3',)]#('match','match_partial','random','random_partial')]
+    DFs = [loadDF(f'{rscratch}{NAME}',csv_save=True) for NAME in ('Beta',)]#('match','match_partial','random','random_partial')]
     if sample:
         for i in range(len(DFs)):
             DFs[i] = DFs[i].sample(sample)
@@ -394,7 +394,7 @@ def hexbin(x, y, color, **kwargs):
     plt.text(-70,.1,len(x),ha='left',va='bottom')
 
 def hexIT(df,X_C='pval_F',Y_C='similarity',sim_thresh=100):
-    extent_codes = {'pval_F':(-90,0),'pval_S':(-80,0),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
+    extent_codes = {'pval_F':(-90,0),'pval_S':(-90,0),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
 
     df = df.loc[df['similarity'] <= sim_thresh]
     g = sns.FacetGrid(df,hue="code", col="code", height=4,col_wrap=3,col_order=['MF','MP','FS','PS','FN','PN'])

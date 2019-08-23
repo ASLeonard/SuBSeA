@@ -81,6 +81,27 @@ def duplicateIntersection(domain_1, domain_2):
     overlap = Counter(domain_1) & Counter(domain_2)
     return tuple(dom for dom in sorted(overlap.elements()))
 
+def sharedMatchingAlgorithm2(df_HET, df_HOM):
+    inverted_domains_HOM_full = invertCSVDomains(df_HOM)
+    inverted_domains_HOM_partial = invertCSVDomains(df_HOM,True)
+
+    
+    comparisons_to_make = []
+    ss=0
+    for _, row in df_HET.iterrows():
+
+        mutual_comparisons, matched_comparisons = set(), set()
+        partial_comparisons_S, full_comparisons_S = set(), set()
+        partial_comparisons_N, full_comparisons_N = set(), set()
+
+        
+        pdb = row['PDB_id']
+        domains = row['domains']
+        interactions = row['interfaces']
+
+        for interaction_pair in interactions:
+            
+
 def sharedMatchingAlgorithm(df_HET, df_HOM):
     inverted_domains_HOM_full = invertCSVDomains(df_HOM)
     inverted_domains_HOM_partial = invertCSVDomains(df_HOM,True)

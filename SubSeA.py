@@ -276,8 +276,8 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
 from multiprocessing import Pool,Manager
 
 def calculatePvalue(pdb_combination):
-    (het,hom,*chains,code) = pdb_combination
-    args=(het[:4].upper(),het[5],hom[:4].upper(),hom[5],*chains)
+    (het,hom,code) = pdb_combination
+    args=(het[:4].upper(),het[5],hom[:4].upper(),hom[5],het[7],hom[7])
     try:
         n_r, m_r = generateAssistiveFiles(args)
         return ((args,code),MatAlign(*args[:4],needle_result=n_r,matrix_result=m_r))

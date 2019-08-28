@@ -76,23 +76,51 @@ def newFPS(df_HET, df_HOM,match_partials=False):
                 continue
             yield (chain_HET,chain_HOM)
 
+##dead
+from scipy.stats import chi2_contingency
+def domainSubunitRewire(df):
+
+    interaction_edges = []
+
+    for _,row in df.iterrows():
+        domains = row['domains']
+        interactions = row['interfaces']
+        for interaction in interactions:
+            interaction_edges.extend([domains[C] for C in interaction.split('-')])
+    print(len(interaction_edges))
+    
+    
+    #chi2_contingency(obs, lambda_="log-likelihood")
+    return 'dead'
+
 from collections import Counter
 def duplicateIntersection(domain_1, domain_2):
     overlap = Counter(domain_1) & Counter(domain_2)
     return tuple(dom for dom in sorted(overlap.elements()))
 
+def conv(dq):
+    a=[]
+    for _,row in dq.iterrows():
+        for unit in row['interfaces'].split('-'):
+            if unit not in row['domains']:
+                continue
+        #try:
+        #    domains = {K[0]:K[2:] for K in row['domains'].split(';')}
+        #except:
+        #    continue
+    
+        a.append({'PDB_id':row['PDB_id'],'interfaces':[row['interfaces']],'domains':row['domains'],'BSAs':{row['interfaces']:row['BSAs']}})
+
+    return pandas.DataFrame(a)
+
 def sharedMatchingAlgorithm2(df_HET, df_HOM):
-    inverted_domains_HOM_full = invertCSVDomains(df_HOM)
-    inverted_domains_HOM_partial = invertCSVDomains(df_HOM,True)
+    inverted_domains_HOM_full = invertCSVDomains(df_HOM,False,True)
+    inverted_domains_HOM_partial = invertCSVDomains(df_HOM,True,True)
 
     
     comparisons_to_make = []
-    ss=0
+    fail_c=0
     for _, row in df_HET.iterrows():
-
-        mutual_comparisons, matched_comparisons = set(), set()
-        partial_comparisons_S, full_comparisons_S = set(), set()
-        partial_comparisons_N, full_comparisons_N = set(), set()
 
         
         pdb = row['PDB_id']
@@ -100,7 +128,42 @@ def sharedMatchingAlgorithm2(df_HET, df_HOM):
         interactions = row['interfaces']
 
         for interaction_pair in interactions:
-            
+            subunits = interaction_pair.split('-')
+            mutual_domains = duplicateIntersection(*(domains[C] for C in subunits))
+            for S1, S2 in zip(subunits,reversed(subunits)):
+                if mutual_domains and mutual_domains == domains[S1]:
+                    
+                    if mutual_domains in inverted_domains_HOM_full:
+                        for comp_pdb in inverted_domains_HOM_full[mutual_domains]:
+                            if pdb == comp_pdb[:4]:
+                                continue
+                            
+                            comparisons_to_make.append((f'{pdb}_{S1}_{S2}',comp_pdb,'MUT'))
+                    else:
+                        fail_c+=1
+                    
+                else:
+                     if domains[S2] in inverted_domains_HOM_full:
+                        for comp_pdb in inverted_domains_HOM_full[domains[S2]]:
+                            if pdb == comp_pdb[:4]:
+                                continue
+                            comparisons_to_make.append((f'{pdb}_{S1}_{S2}',comp_pdb,'DNO'))
+
+    print(fail_c)
+    return comparisons_to_make
+                    
+
+def filterDataset(df,thresh):
+    if thresh not in {50,70,90}:
+        print('not implemented')
+        return
+
+    with open('PDB_90.txt') as cluster_file:
+        redundant_pdbs = [line.split() for line in cluster_file]
+        
+    
+
+    
 
 def sharedMatchingAlgorithm(df_HET, df_HOM):
     inverted_domains_HOM_full = invertCSVDomains(df_HOM)
@@ -262,8 +325,30 @@ def generateAntiDomains(df,df2):
         ##if the subunit has no domains, don't include ones it interacts with either
         anti_domains[pdb] = dict(antis)#{k:v for k,v in antis.items() if v and k in domains}
     return anti_domains
-        
+
+def shuffledInteractionDomains(df):
+
+    table_of_observations = [[0,0],[0,0]]
+    interaction_edges = []
+
+    for domains, interactions in zip(df['domains'],df['interfaces']):
+        for interaction in interactions:
+            local_domains = [domains[C] for C in interaction.split('-')]
+            table_of_observations[0][duplicateIntersection(*local_domains) != ()] += 1
+            interaction_edges.extend(local_domains)
+
+    interaction_edges = np.asarray(interaction_edges)
+    ##shuffle it
+    np.random.shuffle(interaction_edges)
+    interaction_edges = interaction_edges.reshape((2,-1))
+
+    overlap_results = np.apply_along_axis(lambda x: duplicateIntersection(*x)!=(),arr=interaction_edges,axis=0)
+    for form in (0,1):
+        table_of_observations[1][form] = len(overlap_results[overlap_results==form])
     
+    
+
+    return table_of_observations
     
 def randomProteinSampler(df_HET, df_HOM, domain_mode, N_SAMPLE_LIMIT,match_partials=False):
     
@@ -385,7 +470,7 @@ def main(args):
 
 
     if args.exec_mode == 'match':
-        proteinGenerator = sharedMatchingAlgorithm(df,df2)
+        proteinGenerator = sharedMatchingAlgorithm2(df,df2)
         if args.N_samples:
             proteinGenerator = [proteinGenerator[index] for index in choice(len(proteinGenerator),replace=False,size=args.N_samples)]
         #if args.N_samples is None:

@@ -65,11 +65,14 @@ def loadCSV(fname):
 
 from domains import readDomains, invertDomains
 
-def invertCSVDomains(df, partials=False):
+def invertCSVDomains(df, partials=False, homomeric=False):
     dom_dict = {}
     for _,row in df.iterrows():
         if row['domains'] is not None:
-            dom_dict[row['PDB_id']] = row['domains']
+            if homomeric:
+                dom_dict[row['PDB_id']] = {interaction.replace('-','_'):row['domains'][interaction[0]] for interaction in row['interfaces']}
+            else:
+                dom_dict[row['PDB_id']] = row['domains']
     return invertDomains(dom_dict,partials)
         
 import pandas

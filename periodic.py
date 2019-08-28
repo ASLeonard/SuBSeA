@@ -194,7 +194,7 @@ def filterDataset(df,thresh):
 
         if unique_interactions:
             flat_chains = {C for pair in unique_interactions for C in pair.split('-')}
-            new_df.append({'PDB_id':pdb,'interfaces':unique_interactions,'BSAs':[row['BSAs'][pair] for pair in unique_interactions],'domains':{C:row['domains'][C] for C in flat_chains}})
+            new_df.append({'PDB_id':pdb,'interfaces':unique_interactions,'BSAs':{pair:row['BSAs'][pair] for pair in unique_interactions},'domains':{C:row['domains'][C] for C in flat_chains}})
 
     return pandas.DataFrame(new_df)
     

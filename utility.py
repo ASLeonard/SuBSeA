@@ -52,7 +52,7 @@ def loadCSV(fname):
                 row['interfaces'] = set(interfaces.split('-'))
         else:
             row['interfaces'] = eval(row['interfaces'].values[0])
-        if True or ';' in row['domains']:
+        if ';' in row['domains']:
             row['domains'] = {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in row['domains'].split(';') if len(dom)>1}
         else:
             row['domains'] = eval(row['domains'])

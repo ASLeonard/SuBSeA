@@ -131,7 +131,7 @@ def sharedMatchingAlgorithm2(df_HET, df_HOM):
             subunits = interaction_pair.split('-')
             mutual_domains = duplicateIntersection(*(domains[C] for C in subunits))
             for S1, S2 in zip(subunits,reversed(subunits)):
-                if mutual_domains and mutual_domains == domains[S1]:
+                if mutual_domains == domains[S1]:
                     
                     if mutual_domains in inverted_domains_HOM_full:
                         for comp_pdb in inverted_domains_HOM_full[mutual_domains]:
@@ -141,6 +141,13 @@ def sharedMatchingAlgorithm2(df_HET, df_HOM):
                             comparisons_to_make.append((f'{pdb}_{S1}_{S2}',comp_pdb,'MUT'))
                     else:
                         fail_c+=1
+                elif mutual_domains:
+                    if mutual_domains in inverted_domains_HOM_full:
+                        for comp_pdb in inverted_domains_HOM_full[mutual_domains]:
+                            if pdb == comp_pdb[:4]:
+                                continue
+                            
+                            comparisons_to_make.append((f'{pdb}_{S1}_{S2}',comp_pdb,'MPA'))
                     
                 else:
                      if domains[S2] in inverted_domains_HOM_full:
@@ -158,9 +165,39 @@ def filterDataset(df,thresh):
         print('not implemented')
         return
 
-    with open('PDB_90.txt') as cluster_file:
-        redundant_pdbs = [line.split() for line in cluster_file]
+    
+    with open(f'PDB_{thresh}.txt') as cluster_file:
+        redundant_pdbs = [set(line.split()) for line in cluster_file]
+
+
+    used_cluster_interactions = set()
+    new_df = []
+    
+    for _,row in df.iterrows():
+        pdb = row['PDB_id']
+        unique_interactions = []
+
         
+        for interaction_pair in row['interfaces']:
+            cluster_indexes = []
+            for chain in interaction_pair.split('-'):
+                for index, cluster in enumerate(redundant_pdbs):
+                    if f'{pdb.upper()}_{chain}' in cluster:
+                        cluster_indexes.append(index)
+                        break
+
+            cluster_indexes = tuple(cluster_indexes)
+            
+            if cluster_indexes not in used_cluster_interactions:
+                used_cluster_interactions.add(cluster_indexes)
+                unique_interactions.append(interaction_pair)
+
+        if unique_interactions:
+            flat_chains = {C for pair in unique_interactions for C in pair.split('-')}
+            new_df.append({'PDB_id':pdb,'interfaces':unique_interactions,'BSAs':[row['BSAs'][pair] for pair in unique_interactions],'domains':{C:row['domains'][C] for C in flat_chains}})
+
+    return pandas.DataFrame(new_df)
+    
     
 
     
@@ -465,8 +502,8 @@ def chainMap():
 
 def main(args):
 
-    df = loadCSV('New_heteromersR.csv')
-    df2 = loadCSV('New_homomersR.csv')
+    df = loadCSV('Het70.csv')
+    df2 = loadCSV('Hom70.csv')
 
 
     if args.exec_mode == 'match':
@@ -504,7 +541,7 @@ def main(args):
             json.dump(results,f_out)
     else:
         return
-        columns = ['id','code','pval_F','pval_S','pval_T','hits','similarity','score','align_length','overlap']
+        columns = ['id','code','pval_F','pval_S','pval_T','pval_F2','pval_S2','pval_T2','hits','similarity','score','align_length','overlap']
         with open(f'/rscratch/asl47/PDB_results/{args.file_name}_comparison.csv','w') as f_out:
             df = pandas.DataFrame(results)
             df.columns = columns

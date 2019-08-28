@@ -253,8 +253,10 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
     
 
     pmatrix = binomialcdf(matrix,rowsums,colsums,*length,novg=noverlap,N_FACTOR=True)
+    pmatrix_alt = binomialcdf(matrix,rowsums,colsums,*length,novg=noverlap,N_FACTOR=False)
 
-    val_matrix=pmatrix[1:,1:].copy()
+    val_matrix = pmatrix[1:,1:].copy()
+    val_matrix_alt = pmatrix_alt[1:,1:].copy()
 
     def findMinElements(p_array,mins=[]):
         if np.min(p_array) <= 1:
@@ -267,8 +269,9 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
             return mins
 
     alignment_scores = findMinElements(val_matrix)
+    alignment_scores_alt = findMinElements(val_matrix_alt)
 
-    return (pcombine(alignment_scores,'fisher'),pcombine(alignment_scores,'stouffer'),pcombine(list(pmatrix[1:,1:].flatten())),len(alignment_scores),similarity,score,needle_length,noverlap)
+    return (pcombine(alignment_scores,'fisher'),pcombine(alignment_scores,'stouffer'),pcombine(list(pmatrix[1:,1:].flatten())),pcombine(alignment_scores_alt,'fisher'),pcombine(alignment_scores_alt,'stouffer'),pcombine(list(pmatrix_alt[1:,1:].flatten())),len(alignment_scores),similarity,score,needle_length,noverlap)
 
 
 

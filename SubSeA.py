@@ -50,14 +50,21 @@ def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
 
         ##see if fasta info is in given file
         try:
-            subprocess.run(f'grep -i {pdb}_{chain} -A1 {BASE_PATH}FASTA/cleaned2_all_fasta.txt > {BASE_PATH}FASTA/{pdb}_{chain}.fasta.txt',shell=True,check=True,stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            with open(f'{BASE_PATH}FASTA/{pdb}_{chain}.fasta.txt','w') as fasta_file:
+                subprocess.run(['grep', '-i','-A1',f'{pdb}_{chain}', f'{BASE_PATH}FASTA/cleaned2_all_fasta.txt'],check=True,stdout=fasta_file)
+                
         except subprocess.CalledProcessError as e:
             ##could not find FASTA data in all_fasta file, try downloading
             print(f'Pulling FASTA data for {pdb}_{chain}')
             if not pullFASTA(pdb,chain):
                 raise ValueError(f'Chain does not seem to exist for {pdb}_{chain}')
+    
+    try:
+        subprocess.run([f'{needle_EXEC}', f'{BASE_PATH}FASTA/{pdb_1}_{chain_1}.fasta.txt', f'{BASE_PATH}FASTA/{pdb_2}_{chain_2}.fasta.txt', '-auto', '-outfile', f'{BASE_PATH}NEEDLE/{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle'],check=True)
+    except subprocess.CalledProcessError as e:
+        print('Needle based error:\n',e,'\nRaising now')
+        
 
-    subprocess.run(f'{needle_EXEC} {BASE_PATH}FASTA/{pdb_1}_{chain_1}.fasta.txt {BASE_PATH}FASTA/{pdb_2}_{chain_2}.fasta.txt -gapopen 10.0 -gapextend 0.5 -outfile {BASE_PATH}NEEDLE/{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle',shell=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
 def makeTypes(pdb,chain_1=None,chain_2=None):
     similaritythresh = 2.0
@@ -191,13 +198,19 @@ def readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2):
 
     
                 
-def generateAssistiveFiles(pdbs,write_intermediates=True):
+def generateAssistiveFiles(pdbs,write_intermediates=False):
+    if write_intermediates:
+        print('Writing intermediates')
     needleAlign(*pdbs[:4],needle_EXEC='/rscratch/asl47/needle')
 
     type1 = makeTypes(pdbs[0],pdbs[1],None if len(pdbs)<6 else pdbs[4])
     type2 = makeTypes(pdbs[2],pdbs[3],None if len(pdbs)<6 else pdbs[5])
-    (seq1,seq2),align, similarity, score = readNeedle(pdbs)
- 
+
+    try:
+        (seq1,seq2),align, similarity, score = readNeedle(pdbs)
+    except Exception as e:
+        print(e)
+        raise Exception('YIKES')
 
     int_1A,int_1B = makeInteractions(type1,seq1,pdbs[1])
     int_2A,int_2B = makeInteractions(type2,seq2,pdbs[3])
@@ -229,6 +242,7 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
         similarity, noverlap, *length, score  = needle_result
         needle_length = sum(length) - noverlap
     else:
+        print('loading needle manually')
         (seq1,seq2),align, similarity, score = readNeedle([pdb_1,chain_1,pdb_2,chain_2])
         length = (sum(c.isalpha() for c in seq) for seq in (seq1,seq2))
         noverlap = sum(length) - len(align)
@@ -239,13 +253,14 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
         row_headers,column_headers, matrix = matrix_result
 
     else:
+        print('loading matrix manually')
         column_headers,row_headers, matrix = readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2)
 
 
     ##trivially no possible matches
     if any(i<2 for i in matrix.shape):
         ##REJECT CODE
-        return (1,1,1,0,similarity,score,needle_length,noverlap)
+        return (1,1,1, 1,1,1, 0,similarity,score,needle_length,noverlap)
 
     #pmatrix = np.ones(matrix.shape)
 
@@ -258,7 +273,9 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
     val_matrix = pmatrix[1:,1:].copy()
     val_matrix_alt = pmatrix_alt[1:,1:].copy()
 
-    def findMinElements(p_array,mins=[]):
+    def findMinElements(p_array,mins=None):
+        if mins is None:
+            mins = []
         if np.min(p_array) <= 1:
             row_i,col_i = divmod(np.argmin(p_array),p_array.shape[1])
             mins.append(p_array[row_i,col_i])
@@ -270,6 +287,9 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
 
     alignment_scores = findMinElements(val_matrix)
     alignment_scores_alt = findMinElements(val_matrix_alt)
+    #print(alignment_scores)
+    #print(alignment_scores_alt)
+    #print('over')
 
     return (pcombine(alignment_scores,'fisher'),pcombine(alignment_scores,'stouffer'),pcombine(list(pmatrix[1:,1:].flatten())),pcombine(alignment_scores_alt,'fisher'),pcombine(alignment_scores_alt,'stouffer'),pcombine(list(pmatrix_alt[1:,1:].flatten())),len(alignment_scores),similarity,score,needle_length,noverlap)
 
@@ -292,22 +312,23 @@ import csv
 def paralleliseAlignment(pdb_pairs,file_name):
     print('Parellelising alignment')
 
-    columns = ['id','code','pval_F','pval_S','pval_T','hits','similarity','score','align_length','overlap']
+    columns = ['id','code','pval_F','pval_S','pval_T','pval_F2','pval_S2','pval_T2','hits','similarity','score','align_length','overlap']
     
     results = Manager().list()
     with Pool() as pool, open(f'/rscratch/asl47/PDB_results/{file_name}_comparison.csv','w', newline='') as csvfile:
         f_writer = csv.writer(csvfile)
         f_writer.writerow(columns)
         for progress, ((key,code),p_value) in enumerate(pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50)):
-            try:
-                if os.path.exists('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key)):
-                    os.remove('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key))
-            except FileNotFoundError:
-                print('File removal error')
+            #try:
+            #    if os.path.exists('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key)):
+           #         pass
+           #         #os.remove('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key))
+            #except FileNotFoundError:
+            #    print('File removal error')
 
             #results['{}_{}_{}_{}'.format(*key)]=p_value
             if p_value != 'error':
-                f_writer.writerow(['{}_{}_{}_{}'.format(*key),code]+[f'{n:.2e}' if isinstance(n,float) else str(n) for n in p_value])
+                f_writer.writerow(['{0}_{1}_{4}_{2}_{3}_{5}'.format(*key),code]+[f'{n:.2e}' if isinstance(n,float) else str(n) for n in p_value])
                 
 
                 #results.append(('{}_{}_{}_{}'.format(*key),code)+p_value)

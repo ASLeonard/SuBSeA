@@ -20,7 +20,7 @@ def pullXML(pdb_code_file):
     pdbs = []
     with open(pdb_code_file) as file_in:
         for line in file_in:
-            pdbs.extend(line.split(', '))
+            pdbs.extend(line.rstrip().split(', '))
             
     print(f'Loaded PDB files, there were {len(pdbs)} codes')
 
@@ -96,7 +96,7 @@ def parseXML(xml_list):
 
     for pdb_entry in xml_list:
         pdb_entry=pdb_entry.upper()
-        print(f'Parsing entry {pdb_entry}')
+        print(f'Parsing entry \'{pdb_entry}\'')
 
         ##load tree in xml_format and convert recursively to dicts
         try:

@@ -7,7 +7,7 @@ import requests
 from collections import defaultdict, Counter
 import numpy as np
 from itertools import product
-from scipy.stats import linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp
+from scipy.stats import linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp, brunnermunzel
 
 from periodic import loadCSV
 
@@ -85,9 +85,14 @@ def convertH(df):
     rows = []
     for _,row in df.iterrows():
         for interface in row['interfaces']:
-            rows.append({'id':'a','shared':domainMatch(row['domains'],*interface.split('-')),'BSA':row['BSAs'][interface]})
+            rows.append({'id':row['PDB_id'],'shared':domainMatch(row['domains'],*interface.split('-')),'BSA':row['BSAs'][interface]})
 
-    return pd.DataFrame(rows)
+
+    df_h = pd.DataFrame(rows)
+    df_h=df_h.replace('partial','full')
+    df_h=df_h.replace('NA','none')
+    
+    return df_h 
 
 def plotDataX(data,stat_func=brunnermunzel):
     #g=sns.regplot(x="TM", y="BSA", data=data)                  
@@ -99,14 +104,16 @@ def plotDataX(data,stat_func=brunnermunzel):
     plt.figure()
     ax = sns.violinplot(x="shared", y="BSA", data=data, palette="muted",split=False,  scale="width",scale_hue=True,inner="quartile",cut=0,bw=.3)
 
-    
+    plt.yscale('log')
     plt.show(block=False)
+    
     low = data.loc[(data['shared']=='none')]# | (data['shared']=='NA')]
     high = data.loc[(data['shared']=='full') | (data['shared']=='partial')]
     homodimer_ref = data.loc[(data['shared']=='hom')]
     for val, dic in zip(('High','Low','Ref'),(high,low,homodimer_ref)):
         print("{}: ({})".format(val,len(dic))," = ", np.nanmedian(dic['BSA']))
-     
+
+         
     print("\np-value: {}\n".format(stat_func(high['BSA'],low['BSA'],alternative='greater',distribution='normal')[1]))
     print("\np-value: {}\n".format(stat_func(homodimer_ref['BSA'],low['BSA'],distribution='normal')[1]))
     print("\np-value: {}\n".format(stat_func(homodimer_ref['BSA'],high['BSA'],distribution='normal')[1]))
@@ -119,8 +126,8 @@ def plotDataX(data,stat_func=brunnermunzel):
     #data.loc[~(data['domain']=='full') & ~(data['domain']=='partial')]
     #print("\np-value: {}".format(mannwhitneyu(domain_yes['BSA'],domain_no['BSA'],alternative='greater')[1]))
     
-    #print('\n CLES: ',commonLanguageES(low['BSA'],high['BSA']))
-    #print('\n CLES: ',commonLanguageES(high['BSA'],homodimer_ref['BSA']))
+    print('\n CLES: ',commonLanguageES(low['BSA'],high['BSA']))
+    print('\n CLES: ',commonLanguageES(high['BSA'],homodimer_ref['BSA']))
     #print('\n CLES: ',commonLanguageES(low['BSA'],homodimer_ref['BSA']))
 
     #print(np.nanmedian(domain_yes['BSA']),np.nanmedian(domain_no['BSA']))
@@ -213,31 +220,31 @@ def loadDF(file_ID,json_save = False,csv_save=False):
     return df
 
 def splitData(df,thresh=80):
-    f80 = df.loc[(df['match']=='M') & (df['similarity']<thresh)]
-    M80 = df.loc[(df['match']=='MP') & (df['similarity']<thresh)]
-    R80 = df.loc[(df['match']=='RP') & (df['similarity']<thresh)]
+    f80 = df.loc[(df['code']=='MUT') & (df['similarity']<thresh)]
+    M80 = df.loc[(df['code']=='MPA') & (df['similarity']<thresh)]
+    R80 = df.loc[(df['code']=='DNO') & (df['similarity']<thresh)]
     return f80,M80,R80
 
 def loadALL(sample=None,rscratch=True):
     rscratch = '/rscratch/asl47/PDB_results/' if rscratch else ''
-    DFs = [loadDF(f'{rscratch}{NAME}',csv_save=True) for NAME in ('Beta',)]#('match','match_partial','random','random_partial')]
+    DFs = [loadDF(f'{rscratch}{NAME}',csv_save=True) for NAME in ('Data_50','Data_70')]#('match','match_partial','random','random_partial')]
     if sample:
         for i in range(len(DFs)):
             DFs[i] = DFs[i].sample(sample)
         
 
-    for df,code in zip(DFs,('M','MP','R','RP')):
-        df['match'] = code
+    for df,code in zip(DFs,('MUT','MPA','DNO')):#MP','R','RP')):
+        #df['match'] = code
         df['gaps'] = df['align_length']-df['overlap']
         df['sg'] =  df['similarity']//5
         df['norm_OVR'] = df['overlap']/df['align_length']
         df['norm_SCR'] = df['score']/df['align_length']
-        for pval in ('pval_F','pval_S','pval_T'):
+        for pval in ('pval_F','pval_S','pval_T','pval_F2','pval_S2','pval_T2'):
             df[pval] = np.log10(df[pval])
     #print(df)
 
     
-    return pd.concat(DFs,ignore_index=True)
+    return DFs#pd.concat(DFs,ignore_index=True)
     
 
 
@@ -296,16 +303,20 @@ def plotSNS(df):
     
 def plotSNS2(df,X_C='pval_F',Y_C='similarity'):
 
-    extent_codes = {'pval_F':(-90,0),'pval_S':(-80,0),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
+    df = df.loc[(df.pval_S2<-2) & (df.norm_OVR>-1)]
+     
+    extent_codes = {'pval_F2':(-30,0),'pval_S2':(-30,0),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
     grid = sns.JointGrid(x=X_C, y=Y_C, data=df)
     print(min(df[X_C]))
+
+   
 
     g = grid.plot_joint(plt.hexbin,gridsize=(100,100),bins='log',cmap='cividis',mincnt=1,extent=extent_codes[X_C]+extent_codes[Y_C])
 
     g = g.plot_marginals(sns.distplot, kde=True, color="m",kde_kws={'cut':0,'kernel':'epa','bw':.05})
     
     g.ax_marg_x.set_yscale('log')
-    g = g.annotate(kendalltau,loc="center left")
+    g = g.annotate(spearmanr,loc="center left")
     plt.colorbar()
 
     plt.show(block=False)
@@ -391,14 +402,18 @@ def hexbin(x, y, color, **kwargs):
     cmap = plt.get_cmap('cividis')
     #cmap = sns.light_palette(color, as_cmap=True)
     plt.hexbin(x, y, cmap=cmap, **kwargs)
-    plt.text(-70,.1,len(x),ha='left',va='bottom')
+    plt.text(-10,.1,len(x),ha='left',va='bottom')
+    print(kendalltau(10**(x),y))
+    print(np.median(x),np.mean(x))
 
-def hexIT(df,X_C='pval_F',Y_C='similarity',sim_thresh=100):
-    extent_codes = {'pval_F':(-90,0),'pval_S':(-90,0),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
+def hexIT(df,X_C='pval_S2',Y_C='norm_OVR',sim_thresh=90):
+    extent_codes = {'pval_F':(-15,0),'pval_F2':(-15,0),'pval_S':(-15,0),'pval_S2':(-30,0),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
 
-    df = df.loc[df['similarity'] <= sim_thresh]
-    g = sns.FacetGrid(df,hue="code", col="code", height=4,col_wrap=3,col_order=['MF','MP','FS','PS','FN','PN'])
+    df = df.loc[df['similarity'] < sim_thresh]
+    df = df.loc[(df['norm_OVR'] > .5) & (df['pval_S2']<-2)]
     
-    g.map(hexbin, X_C, Y_C, bins='log',gridsize=(100,100),mincnt=1,extent=extent_codes[X_C]+extent_codes[Y_C])
+    g = sns.FacetGrid(df,hue="code", col="code", height=4,col_wrap=3,col_order=['MUT','MPA','DNO'])#MF','MP','FS','PS','FN','PN'])
+    
+    g.map(hexbin, X_C, Y_C, bins='log',gridsize=(300,300),mincnt=1,extent=extent_codes[X_C]+extent_codes[Y_C])
 
     plt.show(0)

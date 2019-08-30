@@ -160,13 +160,12 @@ def sharedMatchingAlgorithm2(df_HET, df_HOM):
     return comparisons_to_make
                     
 
-def filterDataset(df,thresh):
+def filterDataset(df,thresh,hom_mode=False):
     if thresh not in {50,70,90}:
         print('not implemented')
         return
-
     
-    with open(f'PDB_{thresh}.txt') as cluster_file:
+    with open(f'PDB_clusters_{thresh}.txt') as cluster_file:
         redundant_pdbs = [set(line.split()) for line in cluster_file]
 
 
@@ -187,6 +186,8 @@ def filterDataset(df,thresh):
                         break
 
             cluster_indexes = tuple(cluster_indexes)
+            if hom_mode and cluster_indexes[0]!=cluster_indexes[1]:
+                print('not right',pdb, interaction_pair)
             
             if cluster_indexes not in used_cluster_interactions:
                 used_cluster_interactions.add(cluster_indexes)
@@ -205,7 +206,6 @@ def filterDataset(df,thresh):
 def sharedMatchingAlgorithm(df_HET, df_HOM):
     inverted_domains_HOM_full = invertCSVDomains(df_HOM)
     inverted_domains_HOM_partial = invertCSVDomains(df_HOM,True)
-
     
     comparisons_to_make = []
     ss=0
@@ -502,8 +502,12 @@ def chainMap():
 
 def main(args):
 
-    df = loadCSV('Het70.csv')
-    df2 = loadCSV('Hom70.csv')
+    assert args.filter_level in {50,70,90,100}, 'Invalid filter level'
+    if args.filter_level == 100:
+        args.filter_level = 'unfiltered'
+    
+    df = loadCSV(f'Heteromers_{args.filter_level}.csv')
+    df2 = loadCSV(f'Homomers_{args.filter_level}.csv')
 
 
     if args.exec_mode == 'match':
@@ -566,10 +570,11 @@ if __name__ == "__main__":
 
     #parser.add_argument('--R_mode', type=int,dest='R_mode')
     parser.add_argument('--json', type=bool,dest='json')
+    parser.add_argument('--filter', type=int,dest='filter_level')
     parser.add_argument('-N','--N_samples', type=int,dest='N_samples')
     parser.add_argument('--file_name', type=str,dest='file_name')
     parser.add_argument('--partial', action='store_true',dest='allow_partials')
-    parser.set_defaults(exec_style=False,exec_mode=None,exec_source=True,N_samples=None,file_name=None,allow_partials=False,json=False)
+    parser.set_defaults(exec_style=False,exec_mode=None,exec_source=True,N_samples=None,file_name=None,allow_partials=False,json=False,filter_level=50)
     
     args = parser.parse_args()
 

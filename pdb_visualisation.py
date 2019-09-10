@@ -7,7 +7,7 @@ import requests
 from collections import defaultdict, Counter
 import numpy as np
 from itertools import product
-from scipy.stats import linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp
+from scipy.stats import linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp, brunnermunzel
 
 from periodic import loadCSV
 
@@ -81,13 +81,38 @@ def scrubInput(run_name,local_alignment=True,similarity=True,domain='SCOP'):
         rows_list.append(d)
     return pd.DataFrame(rows_list)
 
+def getBSAs(thresh='unfiltered'):
+    df_het = loadCSV(f'Heteromers_{thresh}.csv')
+    bsa_het = convertH(df_het)
+    bsa_het['shared2']= ['full' if x>.99 else ('partial' if x>0 else 'none') for x in bsa_het['shared']] 
+    
+    df_hom = loadCSV(f'Homomers_{thresh}.csv')
+    bsa_hom= convertH(df_hom)
+    #bsa_hom = pd.DataFrame(bsa.loc[bsa.shared=='full'])
+    #bsa_hom.shared = 'hom'
+    bsa_hom['shared2']= ['hom' if x>.99 else 'ignore' for x in bsa_hom['shared']]
+
+    df = pd.concat([bsa_het,bsa_hom],ignore_index=True)
+    df['filter']=thresh
+    return df
+
+from periodic import duplicateIntersection
+def domainMatchF(domains,c1,c2):
+    #print(set(domains[c1]) & set(domains[c2]))
+    return len(duplicateIntersection(domains[c1],domains[c2])) / max(len(domains[c1]),len(domains[c2]))
+    
 def convertH(df):
     rows = []
     for _,row in df.iterrows():
         for interface in row['interfaces']:
-            rows.append({'id':'a','shared':domainMatch(row['domains'],*interface.split('-')),'BSA':row['BSAs'][interface]})
+            rows.append({'id':f'{row["PDB_id"]}_{interface.replace("-","_")}','shared':domainMatchF(row['domains'],*interface.split('-')),'BSA':row['BSAs'][interface]})
 
-    return pd.DataFrame(rows)
+
+    df_h = pd.DataFrame(rows)
+    #df_h=df_h.replace('partial','full')
+    #df_h=df_h.replace('NA','none')
+    
+    return df_h 
 
 def plotDataX(data,stat_func=brunnermunzel):
     #g=sns.regplot(x="TM", y="BSA", data=data)                  
@@ -97,19 +122,22 @@ def plotDataX(data,stat_func=brunnermunzel):
     #g2 = sns.jointplot(x="TM", y="BSA",data=data,xlim=(0,1))
     #sns.relplot(x='TM', y='BSA', size="BSA",sizes=(40, 400),hue='domain', alpha=.75, height=6, data=data)
     plt.figure()
-    ax = sns.violinplot(x="shared", y="BSA", data=data, palette="muted",split=False,  scale="width",scale_hue=True,inner="quartile",cut=0,bw=.3)
+    ax = sns.violinplot(x="shared2", y="BSA", data=data, palette="muted",split=1,hue='filt', scale="width",scale_hue=False,inner="quartile",cut=0)
 
-    
+    plt.yscale('log')
     plt.show(block=False)
-    low = data.loc[(data['shared']=='none')]# | (data['shared']=='NA')]
-    high = data.loc[(data['shared']=='full') | (data['shared']=='partial')]
-    homodimer_ref = data.loc[(data['shared']=='hom')]
+    
+    low = data.loc[(data['shared2']=='none')]# | (data['shared']=='NA')]
+    high = data.loc[(data['shared2']=='full') | (data['shared']=='partial')]
+    homodimer_ref = data.loc[(data['shared2']=='hom')]
     for val, dic in zip(('High','Low','Ref'),(high,low,homodimer_ref)):
         print("{}: ({})".format(val,len(dic))," = ", np.nanmedian(dic['BSA']))
-     
+
+         
     print("\np-value: {}\n".format(stat_func(high['BSA'],low['BSA'],alternative='greater',distribution='normal')[1]))
     print("\np-value: {}\n".format(stat_func(homodimer_ref['BSA'],low['BSA'],distribution='normal')[1]))
     print("\np-value: {}\n".format(stat_func(homodimer_ref['BSA'],high['BSA'],distribution='normal')[1]))
+    #return
     
     #for overlap in ('full','partial','none'): #'NA'
     #     print(overlap,"({})".format(len(data.loc[data['shared']==overlap])),np.nanmedian([float(i) for i in data.loc[data['shared']==overlap]['BSA']]))
@@ -119,7 +147,7 @@ def plotDataX(data,stat_func=brunnermunzel):
     #data.loc[~(data['domain']=='full') & ~(data['domain']=='partial')]
     #print("\np-value: {}".format(mannwhitneyu(domain_yes['BSA'],domain_no['BSA'],alternative='greater')[1]))
     
-    #print('\n CLES: ',commonLanguageES(low['BSA'],high['BSA']))
+    print('\n CLES: ',commonLanguageES(low['BSA'],high['BSA']))
     #print('\n CLES: ',commonLanguageES(high['BSA'],homodimer_ref['BSA']))
     #print('\n CLES: ',commonLanguageES(low['BSA'],homodimer_ref['BSA']))
 
@@ -213,31 +241,31 @@ def loadDF(file_ID,json_save = False,csv_save=False):
     return df
 
 def splitData(df,thresh=80):
-    f80 = df.loc[(df['match']=='M') & (df['similarity']<thresh)]
-    M80 = df.loc[(df['match']=='MP') & (df['similarity']<thresh)]
-    R80 = df.loc[(df['match']=='RP') & (df['similarity']<thresh)]
+    f80 = df.loc[(df['code']=='MUT') & (df['similarity']<thresh)]
+    M80 = df.loc[(df['code']=='MPA') & (df['similarity']<thresh)]
+    R80 = df.loc[(df['code']=='DNO') & (df['similarity']<thresh)]
     return f80,M80,R80
 
 def loadALL(sample=None,rscratch=True):
     rscratch = '/rscratch/asl47/PDB_results/' if rscratch else ''
-    DFs = [loadDF(f'{rscratch}{NAME}',csv_save=True) for NAME in ('Beta',)]#('match','match_partial','random','random_partial')]
+    DFs = [loadDF(f'{rscratch}{NAME}',csv_save=True) for NAME in ('Data_50','Data_70','Data_90')]#('match','match_partial','random','random_partial')]
     if sample:
         for i in range(len(DFs)):
             DFs[i] = DFs[i].sample(sample)
         
 
-    for df,code in zip(DFs,('M','MP','R','RP')):
-        df['match'] = code
+    for df,code in zip(DFs,('MUT','MPA','DNO')):#MP','R','RP')):
+        #df['match'] = code
         df['gaps'] = df['align_length']-df['overlap']
         df['sg'] =  df['similarity']//5
         df['norm_OVR'] = df['overlap']/df['align_length']
         df['norm_SCR'] = df['score']/df['align_length']
-        for pval in ('pval_F','pval_S','pval_T'):
+        for pval in ('pval_F','pval_S','pval_T','pval_F2','pval_S2','pval_T2'):
             df[pval] = np.log10(df[pval])
     #print(df)
 
     
-    return pd.concat(DFs,ignore_index=True)
+    return DFs#pd.concat(DFs,ignore_index=True)
     
 
 
@@ -296,16 +324,20 @@ def plotSNS(df):
     
 def plotSNS2(df,X_C='pval_F',Y_C='similarity'):
 
-    extent_codes = {'pval_F':(-90,0),'pval_S':(-80,0),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
+    df = df.loc[(df.norm_OVR>.25) & (df.pval_S2<-1)]
+     
+    extent_codes = {'pval_F2':(-30,0),'pval_S2':(-30,0),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
     grid = sns.JointGrid(x=X_C, y=Y_C, data=df)
     print(min(df[X_C]))
+
+   
 
     g = grid.plot_joint(plt.hexbin,gridsize=(100,100),bins='log',cmap='cividis',mincnt=1,extent=extent_codes[X_C]+extent_codes[Y_C])
 
     g = g.plot_marginals(sns.distplot, kde=True, color="m",kde_kws={'cut':0,'kernel':'epa','bw':.05})
     
     g.ax_marg_x.set_yscale('log')
-    g = g.annotate(kendalltau,loc="center left")
+    g = g.annotate(spearmanr,loc="center left")
     plt.colorbar()
 
     plt.show(block=False)
@@ -391,14 +423,29 @@ def hexbin(x, y, color, **kwargs):
     cmap = plt.get_cmap('cividis')
     #cmap = sns.light_palette(color, as_cmap=True)
     plt.hexbin(x, y, cmap=cmap, **kwargs)
-    plt.text(-70,.1,len(x),ha='left',va='bottom')
+    plt.text(-10,.1,len(x),ha='left',va='bottom')
+    plt.colorbar()
+    print(spearmanr(x,y))
+    print(np.median(x),np.mean(x))
 
-def hexIT(df,X_C='pval_F',Y_C='similarity',sim_thresh=100):
-    extent_codes = {'pval_F':(-90,0),'pval_S':(-90,0),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
+def hexIT(df,X_C='pval_S2',Y_C='norm_OVR',sim_thresh=90,sigma=2):
+    extent_codes = {'pval_F':(-15,0),'pval_F2':(-15,0),'pval_S':(-15,0),'pval_S2':(0,20),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
 
-    df = df.loc[df['similarity'] <= sim_thresh]
-    g = sns.FacetGrid(df,hue="code", col="code", height=4,col_wrap=3,col_order=['MF','MP','FS','PS','FN','PN'])
+    df = df.loc[df['similarity'] < sim_thresh]
+
+    var = np.var(df[df.pval_S2<0]['pval_S2'])
+    print(var)
+    
+    df_scaled = df.loc[(df['norm_OVR'] > -.01) & (df['pval_S2']<-1*sigma*var)]
+    df.pval_S2 = df.pval_S2*-1
+    df_scaled.pval_S2 = df_scaled.pval_S2*-1
+    #print(df)
+    g = sns.FacetGrid(df,hue="code", col="code", height=4,col_wrap=2,col_order=['MUT','DNO'])#MF','MP','FS','PS','FN','PN'])
     
     g.map(hexbin, X_C, Y_C, bins='log',gridsize=(100,100),mincnt=1,extent=extent_codes[X_C]+extent_codes[Y_C])
+    #g.map(sns.regplot,X_C,Y_C,truncate=True,robust=True)
 
+    #plt.figure()
+    sns.lmplot(x=X_C, y=Y_C, hue="code",hue_order=['MUT','DNO'], data=df_scaled, markers=["o", "x"], palette={'MUT':'darkorange','DNO':'royalblue'},scatter_kws={'alpha':.75},robust=True,truncate=True)
+    #g.map(sns.residplot,data=df,x='pval_S2',y='norm_OVR',robust=True)
     plt.show(0)

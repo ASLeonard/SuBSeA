@@ -52,10 +52,11 @@ def loadCSV(fname):
                 row['interfaces'] = set(interfaces.split('-'))
         else:
             row['interfaces'] = eval(row['interfaces'].values[0])
-        if ';' in row['domains']:
-            row['domains'] = {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in row['domains'].split(';') if len(dom)>1}
-        else:
+        if '{' in row['domains']:
             row['domains'] = eval(row['domains'])
+        else:
+            row['domains'] = {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in row['domains'].split(';') if len(dom)>1}
+            
 
         row['BSAs'] = eval(row['BSAs'])
         #df.iloc[index] = row
@@ -116,46 +117,53 @@ def nextWave(bads):
                 
         
 
-def mergeSheets(heteromerics=True):
+def mergeSheets(heteromerics=True,use_identical_subunits=True,relabel=True):
 
     DEX_interface = 'T' if heteromerics else 'I'
 
     interface_KEY = 'List of interface types (I- isologous homomeric; H - heterologous homomeric; T - heteromeric)'
-    interface_LIST = 'List of interface types (all identical subunits are given the same code)'
+    interface_LIST = 'List of interface types (all identical subunits are given the same code)' if use_identical_subunits else 'List of interfaces'
     interface_BSA= 'List of interface sizes (Angstroms^2)'
 
     assembly_SYM = 'Symmetry group (M - monomer; Dna - dihedral with heterologous interfaces; Dns - dihedral with only isologous interfaces; Ts - tetrahedral with isologous interfaces; Ta - tetrahedral with only heterologous interfaces; O* - 4 different octahedral topologies)'
 
     redundant = 'Included in non-redundant set'
     
-    data_heteromers = pandas.read_excel('~/Downloads/PeriodicTable.xlsx',sheet_name=[2])
+    data_heteromers = pandas.read_excel('~/Downloads/PeriodicTable.xlsx',sheet_name=[0,2])
 
-    domain_dict=readDomains('periodic3')
-    chain_map = chainMap()
-    chain_mapE = chainMap('Extra')
+    domain_dict=readDomains('periodic2')
+    
+    chain_map = chainMap() if relabel else {}
+    chain_mapE = chainMap('Extra') if relabel else {}
+    chain_map_full = {**chain_map,**chain_mapE}
     new_rows = []
 
     for data in data_heteromers.values():
         for i, row in data.iterrows():
-            if redundant in row and row[redundant] == 0:
-                continue
+            #if redundant in row and row[redundant] == 0:
+            #    continue
             PDB_code = row['PDB ID']
-            
+
             if assembly_SYM in row and row[assembly_SYM] == 'M':
                 continue
             
             
             if not pandas.isna(row[interface_KEY]) and any(type_ in row[interface_KEY] for type_ in ('T','I')):
 
-                if PDB_code in chain_map:
-                    for swaps in chain_map[PDB_code].items():
-                        row[interface_LIST] = row[interface_LIST].replace(*swaps)
-                        
-                if PDB_code in chain_mapE:
-                    for swaps in chain_mapE[PDB_code].items():
-                        row[interface_LIST] = row[interface_LIST].replace(*swaps)
-                        
-                all_interfaces = zip(row[interface_LIST].split(','),row[interface_KEY].split(','))   
+                if not all(c.isupper() for pair in row[interface_KEY].split(',') for c in pair.split('-')):
+                    print('werid chains',PDB_code,row[interface_KEY])
+                    continue
+
+                if PDB_code in chain_map_full:
+                    
+                    #homomeric mapping probably
+                    #if len(set(chain_map_full[PDB_code].values()))!=1:
+                    new_interfaces = row[interface_LIST].lower()
+                    for swaps in chain_map_full[PDB_code].items():
+                        new_interfaces=new_interfaces.replace(swaps[0].lower(),swaps[1])
+                    row[interface_LIST] = new_interfaces
+
+                all_interfaces = zip(row[interface_LIST].split(','),row[interface_KEY].split(','))
                 
                 meaningful_interfaces = list({'-'.join(sorted(interface.split('-'))) for (interface,type_) in all_interfaces if (type_ == DEX_interface and (not heteromerics or interface[0] != interface[2]))})
 
@@ -186,11 +194,49 @@ def mergeSheets(heteromerics=True):
                 new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info, 'BSAs': str({K:BSA_av[K] for K in meaningful_interfaces})})
 
                 
-    with open('domain_architectures_periodic3.json', 'w') as file_out:
+    with open('domain_architectures_periodic2.json', 'w') as file_out:
         file_out.write(json.dumps(domain_dict))
 
     return pandas.DataFrame(new_rows)
 
+def filterDataset(df,thresh,hom_mode=False):
+    if thresh not in {50,70,90}:
+        print('not implemented')
+        return
+    
+    with open(f'PDB_clusters_{thresh}.txt') as cluster_file:
+        redundant_pdbs = [set(line.split()) for line in cluster_file]
+
+
+    used_cluster_interactions = set()
+    new_df = []
+    
+    for _,row in df.iterrows():
+        pdb = row['PDB_id']
+        unique_interactions = []
+
+        
+        for interaction_pair in row['interfaces']:
+            cluster_indexes = []
+            for chain in interaction_pair.split('-'):
+                for index, cluster in enumerate(redundant_pdbs):
+                    if f'{pdb.upper()}_{chain}' in cluster:
+                        cluster_indexes.append(index)
+                        break
+
+            cluster_indexes = tuple(cluster_indexes)
+            if hom_mode and cluster_indexes[0]!=cluster_indexes[1]:
+                print('not right',pdb, interaction_pair)
+            
+            if cluster_indexes not in used_cluster_interactions:
+                used_cluster_interactions.add(cluster_indexes)
+                unique_interactions.append(interaction_pair)
+
+        if unique_interactions:
+            flat_chains = {C for pair in unique_interactions for C in pair.split('-')}
+            new_df.append({'PDB_id':pdb,'interfaces':unique_interactions,'BSAs':{pair:row['BSAs'][pair] for pair in unique_interactions},'domains':{C:row['domains'][C] for C in flat_chains}})
+
+    return pandas.DataFrame(new_df)
 
 def chainMap(extra=None):
     chainmap = defaultdict(dict)
@@ -278,3 +324,13 @@ def wrFE(rm):
         for A,B in maps.items():
             tw+='\t'.join((pdb,A,B))+'\n'
     return tw
+
+
+
+if __name__ == "__main__":
+    for c in ('Heteromers','Homomers'):
+        df = loadCSV(f'{c}_unfiltered.csv')
+        for i in (50,70,90):
+            f = filterDataset(df,i)
+            f.to_csv(f'{c}_{i}.csv',index=False,columns=['PDB_id','interfaces','domains','BSAs'])
+        

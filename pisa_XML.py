@@ -21,13 +21,15 @@ def pullXML(pdb_code_file):
     print('Loading PDB files')
     
     pdbs = []
+
     if isinstance(pdb_code_file,str):
         with open(pdb_code_file) as file_in:
             for line in file_in:
-                pdbs.extend(line.split(', '))
+                pdbs.extend(line.rstrip().split(', '))
     else:
         pdbs = pdb_code_file
         
+
     print(f'Loaded PDB files, there were {len(pdbs)} codes')
 
     URL_base = 'http://www.ebi.ac.uk/pdbe/pisa/cgi-bin/interfaces.pisa?'
@@ -102,7 +104,7 @@ def parseXML(xml_list):
 
     for pdb_entry in xml_list:
         pdb_entry=pdb_entry.upper()
-        print(f'Parsing entry {pdb_entry}')
+        print(f'Parsing entry \'{pdb_entry}\'')
 
         ##load tree in xml_format and convert recursively to dicts
         try:

@@ -385,8 +385,9 @@ def shuffledInteractionDomains(df):
     
     
 
-    return table_of_observations
-    
+    return table_of_observations, fisher_exact(table_of_observations)
+
+from scipy.stats import fisher_exact
 def randomProteinSampler(df_HET, df_HOM, domain_mode, N_SAMPLE_LIMIT,match_partials=False):
     
     inverted_homodimer_domains = invertCSVDomains(df_HOM)

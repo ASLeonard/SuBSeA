@@ -12,16 +12,24 @@ BASE_PATH='/scratch/asl47/PDB/'
 import urllib.request
 import shutil
 
+def checkINTExisting(df):
+    missing_IDs = [row['PDB_id'] for _,row in clean_df.iterrows() if not os.path.exists(f'{BASE_PATH}INT/{row["PDB_id"].upper()}.int')]
+    print(f'Mising {len(drop_indices)} IDs')
 
 
 def pullXML(pdb_code_file):
     print('Loading PDB files')
     
     pdbs = []
-    with open(pdb_code_file) as file_in:
-        for line in file_in:
-            pdbs.extend(line.rstrip().split(', '))
-            
+
+    if isinstance(pdb_code_file,str):
+        with open(pdb_code_file) as file_in:
+            for line in file_in:
+                pdbs.extend(line.rstrip().split(', '))
+    else:
+        pdbs = pdb_code_file
+        
+
     print(f'Loaded PDB files, there were {len(pdbs)} codes')
 
     URL_base = 'http://www.ebi.ac.uk/pdbe/pisa/cgi-bin/interfaces.pisa?'
@@ -147,6 +155,11 @@ def main():
             print('About to pull XML files')
             pullXML(sys.argv[1])
             print('Finished XML operations')
+        elif '.csv' in sys.argv[1]:
+            print('About to pull XML files for DF')
+            pullXML(checkINTExisting(sys.argv[1]))
+            print('Finished XML operations')
+
         elif sys.argv[1] == 'split':
             splitXML()
         elif '.xml' in sys.argv[1]:

@@ -20,11 +20,6 @@ def scrapePDBs(df):
     with open('period_pdb_codes.txt', 'w') as file_out:
           file_out.write(', '.join(df['PDB ID']))
 
-def checkINTExisting(df_HET, df_HOM):
-    for clean_df in (df_HET, df_HOM):
-        drop_indices = [ind for ind,row in clean_df.iterrows() if not os.path.exists(f'/scratch/asl47/PDB/INT/{row["PDB_id"].upper()}.int')]
-        print('Had to drop ',len(drop_indices))
-        clean_df.drop(drop_indices,inplace=True)
 
 
 def getDomainPWeights(domains,samples=None):
@@ -572,13 +567,15 @@ def main(args):
         with open('{}_{}_comparison.dict'.format('Table' if args.exec_source else 'PDB', args.file_name or ('domain_match' if args.exec_mode else 'random')),'w') as f_out:
             json.dump(results,f_out)
     else:
-        return
+
         columns = ['id','code','pval_F','pval_S','pval_T','pval_F2','pval_S2','pval_T2','hits','similarity','score','align_length','overlap']
+        df = pandas.DataFrame(results)
+        df.columns = columns
+        
         with open(f'/rscratch/asl47/PDB_results/{args.file_name}_comparison.csv','w') as f_out:
-            df = pandas.DataFrame(results)
-            df.columns = columns
+            
             df.to_csv(f_out,index=False,columns=columns)
-            #np.array([val for val in results.values() if val!='error'],dtype=float).tofile(f_out)
+
         
         
 if __name__ == "__main__":

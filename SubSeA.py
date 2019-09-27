@@ -122,9 +122,13 @@ def makeInteractions(type_, seq, chain):
     ##wrap double digit numbers to letters for chain ID'ing
     def wrapDoubleDigits(code):
         code_int = int(code)
+        if code_int<0:
+            code_int+=40
         if code_int >= 10:
             ##wrap numbers >36 back to start of alphabet etc
             code = chr(97 + (code_int-10)%26)
+        #elif code_int<0:
+            
         return code
 
     fasta_index = 0
@@ -168,7 +172,7 @@ def makePmatrix(pdbs,inter1a,inter1b,inter2a,inter2b,write=True):
         matrix[(k1,k2)] += 1
         rows.add(k1)
         columns.add(k2)
-
+   
     rows, columns = sorted(rows), sorted(columns)
     
     if not write:
@@ -298,11 +302,11 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
         
 from multiprocessing import Pool,Manager
 
-def calculatePvalue(pdb_combination):
+def calculatePvalue(pdb_combination,WI_=False):
     (het,hom,code) = pdb_combination
     args=(het[:4].upper(),het[5],hom[:4].upper(),hom[5],het[7],hom[7])
     try:
-        n_r, m_r = generateAssistiveFiles(args)
+        n_r, m_r = generateAssistiveFiles(args,write_intermediates=WI_)
         return ((args,code),MatAlign(*args[:4],needle_result=n_r,matrix_result=m_r))
     except Exception as e:
         print(het,hom,'!!Error!!:\t',e)

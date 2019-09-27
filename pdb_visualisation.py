@@ -248,7 +248,7 @@ def splitData(df,thresh=80):
 
 def loadALL(sample=None,rscratch=True):
     rscratch = '/rscratch/asl47/PDB_results/' if rscratch else ''
-    DFs = [loadDF(f'{rscratch}{NAME}',csv_save=True) for NAME in ('Data_50','Data_70','Data_90')]#('match','match_partial','random','random_partial')]
+    DFs = [loadDF(f'{rscratch}{NAME}',csv_save=True) for NAME in ('Trial_90',)]#'Data_50','Data_70','Data_90')]#('match','match_partial','random','random_partial')]
     if sample:
         for i in range(len(DFs)):
             DFs[i] = DFs[i].sample(sample)
@@ -440,12 +440,12 @@ def hexIT(df,X_C='pval_S2',Y_C='norm_OVR',sim_thresh=90,sigma=2):
     df.pval_S2 = df.pval_S2*-1
     df_scaled.pval_S2 = df_scaled.pval_S2*-1
     #print(df)
-    g = sns.FacetGrid(df,hue="code", col="code", height=4,col_wrap=2,col_order=['MUT','DNO'])#MF','MP','FS','PS','FN','PN'])
+    g = sns.FacetGrid(df,hue="code", col="code", height=4,col_wrap=2,col_order=['MUT','MPA','DNO'])#MF','MP','FS','PS','FN','PN'])
     
     g.map(hexbin, X_C, Y_C, bins='log',gridsize=(100,100),mincnt=1,extent=extent_codes[X_C]+extent_codes[Y_C])
     #g.map(sns.regplot,X_C,Y_C,truncate=True,robust=True)
 
     #plt.figure()
-    sns.lmplot(x=X_C, y=Y_C, hue="code",hue_order=['MUT','DNO'], data=df_scaled, markers=["o", "x"], palette={'MUT':'darkorange','DNO':'royalblue'},scatter_kws={'alpha':.75},robust=True,truncate=True)
+    #sns.lmplot(x=X_C, y=Y_C, hue="code",hue_order=['MUT','DNO'], data=df_scaled, markers=["o", "x"], palette={'MUT':'darkorange','DNO':'royalblue'},scatter_kws={'alpha':.75},robust=True,truncate=True)
     #g.map(sns.residplot,data=df,x='pval_S2',y='norm_OVR',robust=True)
     plt.show(0)

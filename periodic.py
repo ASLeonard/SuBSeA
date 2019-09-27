@@ -113,6 +113,31 @@ def conv(dq):
 
     return pandas.DataFrame(a)
 
+def sharedMatchingAlgorithm3(df_HET):
+    
+    comparisons_to_make = []
+    fail_c = 0
+    for _, row in df_HET.iterrows():
+        
+        pdb = row['PDB_id']
+        domains = row['domains']
+        interactions = row['interfaces']
+
+        for interaction_pair in interactions:
+            subunits = interaction_pair.split('-')
+            mutual_domains = duplicateIntersection(*(domains[C] for C in subunits))
+            
+            if mutual_domains:
+                code = 'MUT' if domains[subunits[0]]== domains[subunits[1]] else 'MPA'
+                
+            else:
+                code = 'DNO'
+                
+            comparisons_to_make.append((f'{pdb}_{subunits[0]}_{subunits[1]}',f'{pdb}_{subunits[1]}_{subunits[0]}',code))
+    return comparisons_to_make
+                    
+                    
+
 def sharedMatchingAlgorithm2(df_HET, df_HOM):
     inverted_domains_HOM_full = invertCSVDomains(df_HOM,False,True)
     inverted_domains_HOM_partial = invertCSVDomains(df_HOM,True,True)
@@ -521,6 +546,8 @@ def main(args):
         #else:
         #    print('Sampling domain matched comparisons')
         #    proteinGenerator = RPS_wrapper(df,df2,args.N_samples,args.allow_partials)
+    elif args.exec_mode == 'intra':
+        proteinGenerator = sharedMatchingAlgorithm3(df)
     else:
         print('Sampling anti-domain enforced comparisons')
         proteinGenerator = EPS_wrapper(df,df2,args.N_samples)
@@ -567,7 +594,7 @@ if __name__ == "__main__":
     group2 = parser.add_mutually_exclusive_group()
     group2.add_argument("-D", "--domain", action="store_const",dest='exec_mode',const='match')
     group2.add_argument("-R", "--random", action="store_const",dest='exec_mode',const='random')
-    group2.add_argument('-E','--enforce', action='store_const',dest='exec_mode',const='enforce')
+    group2.add_argument('-I','--intra', action='store_const',dest='exec_mode',const='intra')
 
     #parser.add_argument('--R_mode', type=int,dest='R_mode')
     parser.add_argument('--json', type=bool,dest='json')

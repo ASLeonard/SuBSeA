@@ -7,6 +7,7 @@ import requests
 from collections import defaultdict, Counter
 import numpy as np
 from itertools import product
+
 from scipy.stats import linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp, brunnermunzel
 
 from periodic import loadCSV
@@ -327,11 +328,13 @@ def plotSNS(df):
     plt.show(block=False)
 
     
-def plotSNS2(df,X_C='pval_F',Y_C='similarity'):
+def plotSNS2(df,X_C='pval_F',Y_C='similarity',code=None):
 
-    df = df.loc[(df.norm_OVR>.25) & (df.pval_S2<-1)]
+    if code:
+        df = df[df.code==code]
+    df = df[df.similarity<95] #(df.norm_OVR>.25) & (df.pval_S2<-1)]
      
-    extent_codes = {'pval_F2':(-30,0),'pval_S2':(-30,0),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
+    extent_codes = {'pval_F':(30,0),'pval_S':(0,50),'pval_T':(-80,0),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3)}
     grid = sns.JointGrid(x=X_C, y=Y_C, data=df)
     print(min(df[X_C]))
 
@@ -433,6 +436,7 @@ def hexbin(x, y, color, **kwargs):
     print(spearmanr(x,y))
     print(np.median(x),np.mean(x))
 
+from scipy.stats import expon
 def hexIT(df,X_C='pval_S',Y_C='norm_OVR',sim_thresh=95,sigma=-1*np.log10(.05)):
     extent_codes = {'pval_F':(0,20),'pval_F2':(0,20),'pval_S':(0,20),'pval_S2':(0,20),'pval_T':(0,20),'pval_T2':(0,20),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3),'split':(0,3)}
 
@@ -458,9 +462,27 @@ def hexIT(df,X_C='pval_S',Y_C='norm_OVR',sim_thresh=95,sigma=-1*np.log10(.05)):
     #g.map(sns.regplot,X_C,Y_C,truncate=True,robust=True)
 
 
-    sns.lmplot(x=X_C, y=Y_C, hue="code",hue_order=['DNO','MPA','MUT'], data=df, markers=["o", "P",'d'], palette={'MUT':'darkorange','DNO':'royalblue','MPA':'forestgreen'},scatter_kws={'alpha':.75,'s':150,'facecolor':'None','lw':3},robust=True,truncate=True)
+    sns.lmplot(x=X_C, y=Y_C, hue="code",hue_order=['DNO','MPA','MUT'], data=df, markers=["o", "P",'d'], palette={'MUT':'darkorange','DNO':'royalblue','MPA':'forestgreen'},scatter_kws={'alpha':.75,'s':150,'facecolor':'None','lw':3},robust=False,truncate=True)
     #plt.plot([0,20],[0,-20],'k--',lw=3)
     #g.map(sns.residplot,data=df,x='pval_S2',y='norm_OVR',robust=True)
+
+    plt.figure()
+    cdc= {'MUT':'orange','MPA':'g','DNO':'b'}
+    P_STARS = np.linspace(.1,25,500)
+    for code in ('MUT','MPA','DNO'):
+        df_c = df[df.code==code].pval_S
+        cdf = []
+        
+        for p_star in P_STARS :
+            cdf.append(np.sum(df_c>p_star))
+
+        cdf = np.array(cdf)/max(cdf)
+        plt.loglog(P_STARS,cdf,c=cdc[code])
+
+        param, ptop = scipy.optimize.curve_fit(lambda t,a: np.exp(a*t),  P_STARS,  cdf)
+
+        plt.plot(P_STARS,np.exp(param[0]*P_STARS),ls='--',c=cdc[code])
+
     plt.show(0)
 
 def plotGap(df,sigma=3,X_C='similarity',Y_C='gapX',H_C='norm_OVR'):

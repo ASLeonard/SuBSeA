@@ -383,6 +383,71 @@ def generateAntiDomains(df,df2):
         anti_domains[pdb] = dict(antis)#{k:v for k,v in antis.items() if v and k in domains}
     return anti_domains
 
+def domainPairStatistics(df,df_HOM):
+
+    inverted_domains_HOM_full = invertCSVDomains(df_HOM)
+
+    domain_triplets = defaultdict(lambda : [0,0,0,0])
+
+    for ids, domains, interactions in zip(df['PDB_id'],df['domains'],df['interfaces']):
+        for interaction in interactions:
+            local_domains = [domains[C] for C in interaction.split('-')]
+            for subunit in interaction.split('-'):
+                local_domain = domains[subunit]
+                #if ids!='1a00':
+                #    continue
+                #print(duplicateIntersection(*local_domains))
+                if tuple(sorted(local_domain)) == duplicateIntersection(*local_domains):
+                    #print('Q')
+                    domain_triplets[local_domain][0]+=1
+                elif duplicateIntersection(*local_domains):
+                    #print(local_domains,'X',local_domain,"F", duplicateIntersection(*local_domains))
+                    domain_triplets[local_domain][1]+=1
+                else:
+                    domain_triplets[local_domain][2]+=1
+            
+    for local_domain in domain_triplets.keys():
+        if tuple(local_domain) in inverted_domains_HOM_full:
+            domain_triplets[local_domain][3]+=len(inverted_domains_HOM_full[tuple(local_domain)])
+
+    print([(k,v) for k,v in domain_triplets.items() if (v[0]+v[1]-v[2])<-50])
+    return np.array(list(domain_triplets.values()))
+
+from matplotlib.colors import LogNorm
+def plotStatRel(data_in):
+    data = data_in.copy()
+    data[:,0]+=data[:,1]
+
+    plt.figure()
+    plt.scatter(data[:,0],data[:,2],c=data[:,3],cmap='viridis',norm=LogNorm())
+    max_D = np.max((data[:,0].max(),data[:,2].max()))
+    plt.plot([0,max_D],[0,max_D],'r--')
+
+    lowers = np.where(data[:,0]<data[:,2])[0]
+    highers = np.where(data[:,0]>data[:,2])[0]
+
+    delta_up = np.sum(data[highers,3])/np.sqrt(2)
+    delta_down = np.sum(data[lowers,3])/np.sqrt(2)
+    #print(delta_up,delta_down)
+
+    #print(data[highers,3])
+    #print(data[lowers,3])
+    plt.figure()
+
+    data_src = np.array(sorted([(i[3],i[0]-i[2]) for i in data],reverse=True))
+    markers = ['d' if delta > 0 else ('o' if delta==0 else 's') for delta in data_src[:,1]]
+
+    LN = LogNorm(1,data[:,0].max())
+    CV = plt.get_cmap('viridis')
+    
+    for i, (Y,c,m) in enumerate(zip(data_src[:,1],data_src[:,0],markers)):
+
+        plt.scatter([i],[Y],marker=m,c=[CV(LN(c)) if c>0 else 'k'])#,cmap='viridis')#,c=c,marker=m,cmap='viridis',norm=LN)
+        
+    #plt.scatter(range(len(data_src)),data_src[:,1],c=data_src[:,0],cmap='viridis',norm=LogNorm(),marker=markers)
+    plt.show(0)
+    
+
 def shuffledInteractionDomains(df):
 
     table_of_observations = [[0,0],[0,0]]

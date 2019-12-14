@@ -15,10 +15,10 @@ def swapT(df,df2):
             print(row)
     return rows
 
-def formatFASTA(fname,out_name=None):
+def formatBulkFASTA(fname,out_name=None):
     if not out_name:
-        last_index = fname.rfind('/') + 1
-        out_name = fname[:last_index] + 'xx_' + fname[last_index:]
+        last_index = fname.rfind('/')
+        out_name = f'{fname[:last_index]}/minimal_{fname[last_index+1:]}'
 
     with open(fname,'r') as fasta_in, open(out_name,'w') as fasta_out:
         pdb, sequence = None, ''
@@ -28,11 +28,11 @@ def formatFASTA(fname,out_name=None):
                 pdb = '_'.join(line.split(':')[:2])
             elif 'secstr' in line:
                 if '\n' in pdb or '\n' in sequence:
-                    raise Excepion('f')
+                    raise Exception('newline only line present in downloaded file, not sure how/why')
                 if len(sequence) < 2:
                     print(pdb,sequence)
-                    raise Exception('Something went wrong!')
-                fasta_out.write(pdb+'\n'+sequence+'\n')
+                    raise Exception(f'Something went wrong on {pdb}, {sequence}')
+                fasta_out.write(f'{pdb}\n{sequence}\n')
                 pdb, sequence = None, ''
             elif pdb:
                 sequence += line.rstrip()
@@ -42,7 +42,6 @@ def loadCSV(fname):
     df = pandas.read_csv(fname,index_col=False)
     rr=[]
     for index,row in df.iterrows():
-        #row['BSAs']
 
         interfaces = row['interfaces']
         if isinstance(interfaces,str):
@@ -114,8 +113,6 @@ def nextWave(bads):
             if not fullFASTA('/scratch/asl47/PDB/FASTA/{}.fasta.txt'.format(bad.upper())):
                 super_bad.append(bad)
     return super_bad
-                
-        
 
 def mergeSheets(heteromerics=True,use_identical_subunits=True,relabel=True):
 

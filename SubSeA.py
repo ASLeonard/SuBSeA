@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-import sys
+
 import os
 
-from collections import defaultdict, Counter
+from collections import defaultdict
 from operator import itemgetter
 from time import sleep
-import itertools
 
-import subprocess
+import subprocess #no sec
 import numpy as np
 
 import scipy.stats
 import scipy.special
 import requests
-import json
 
 
-BASE_PATH='/scratch/asl47/PDB/'
+BASE_PATH, FASTA_PATH = '', ''
 
 def pullFASTA(pdb,chain):
     for _ in range(3):
@@ -27,11 +25,12 @@ def pullFASTA(pdb,chain):
             print('Timeout from EBI, pausing temporarily again')
             sleep(5)
     else:
+        print('Timeout reached limit, skipping')
         return False
 
     for idx in range(0,len(lines),2):
         if chain in lines[idx][lines[idx].rfind('|')+1:]:
-            with open(f'{BASE_PATH}FASTA/{pdb}_{chain}.fasta.txt','w') as file_:
+            with open(f'{BASE_PATH}{FASTA_PATH}{pdb}_{chain}.fasta.txt','w') as file_:
                 file_.write('>{}_{}\n'.format(pdb,chain)+lines[idx+1])
                 return True
     return False
@@ -44,14 +43,14 @@ def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
         return True
 
     for pdb, chain in ((pdb_1,chain_1),(pdb_2,chain_2)):
-        file_name = f'{BASE_PATH}FASTA/{pdb}_{chain}.fasta.txt'
+        file_name = f'{BASE_PATH}{FASTA_PATH}/{pdb}_{chain}.fasta.txt'
         if os.path.exists(file_name) and os.path.getsize(file_name) > 20:
             continue
 
         ##see if fasta info is in given file
         try:
-            with open(f'{BASE_PATH}FASTA/{pdb}_{chain}.fasta.txt','w') as fasta_file:
-                subprocess.run(['grep', '-i','-A1',f'{pdb}_{chain}', f'{BASE_PATH}FASTA/cleaned2_all_fasta.txt'],check=True,stdout=fasta_file)
+            with open(f'{BASE_PATH}{FASTA_PATH}{pdb}_{chain}.fasta.txt','w') as fasta_file:
+                subprocess.run(['grep', '-i','-A1',f'{pdb}_{chain}', f'{BASE_PATH}{FASTA_PATH}cleaned2_all_fasta.txt'],check=True,stdout=fasta_file)
                 
         except subprocess.CalledProcessError as e:
             ##could not find FASTA data in all_fasta file, try downloading
@@ -60,14 +59,12 @@ def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
                 raise ValueError(f'Chain does not seem to exist for {pdb}_{chain}')
     
     try:
-        subprocess.run([f'{needle_EXEC}', f'{BASE_PATH}FASTA/{pdb_1}_{chain_1}.fasta.txt', f'{BASE_PATH}FASTA/{pdb_2}_{chain_2}.fasta.txt', '-auto', '-outfile', f'{BASE_PATH}NEEDLE/{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle'],check=True)
+        subprocess.run([f'{needle_EXEC}', f'{BASE_PATH}{FASTA_PATH}{pdb_1}_{chain_1}.fasta.txt', f'{BASE_PATH}{FASTA_PATH}{pdb_2}_{chain_2}.fasta.txt', '-auto', '-outfile', f'{BASE_PATH}NEEDLE/{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle'],check=True)
     except subprocess.CalledProcessError as e:
         print('Needle based error:\n',e,'\nRaising now')
-        
 
 
 def makeTypes(pdb,chain_1=None,chain_2=None):
-    similaritythresh = 2.0
     type_ = {}
     with open(BASE_PATH+f'INT/{pdb}.int') as file_:
         for line_raw in file_:
@@ -80,14 +77,10 @@ def makeTypes(pdb,chain_1=None,chain_2=None):
                 interactions = [interaction for interaction in interactions if (interaction[0][0]==chain_2 and interaction[1][0]==chain_1)]
                 
             if interactions:
-                #if len(interactions) != 2 or abs(interactions[0][2]-interactions[1][2]) >= similaritythresh or interactions[0][0] != interactions[1][1] or interactions[0][1] != interactions[1][0]:
-
                 interactions.sort(key=itemgetter(2),reverse=True)
                 interactions.sort(key=itemgetter(0))
-                    
                 type_[chain+res] = tuple(reversed(interactions[0][0].split('_')))
     return type_
-        
 
 ##scrape FASTA sequence for both chains, and the alignment interactions 
 def readNeedle(pdbs):
@@ -157,9 +150,7 @@ def writePialign(pdbs,inter1a,inter1b,inter2a,inter2b,align,seq1,seq2):
             slice_ = slice(idx,idx+iter_chunk)
             idx_A+=iter_chunk-seq1[slice_].count('-')
             idx_B+=iter_chunk-seq2[slice_].count('-')
-
-            a=align[idx:idx+50]
-           
+          
             pialign_out.write(f'{inter1b[slice_]}\n{inter1a[slice_]}\n{seq1[slice_]}   {idx_A}\n{align[slice_]}\n{seq2[slice_]}   {idx_B}\n{inter2a[slice_]}\n{inter2b[slice_]}\n\n')
 
 def makePmatrix(pdbs,inter1a,inter1b,inter2a,inter2b,write=True):
@@ -179,14 +170,14 @@ def makePmatrix(pdbs,inter1a,inter1b,inter2a,inter2b,write=True):
         matrix_rows=[]
         for i in rows:
             matrix_rows.append([matrix[(i,j)] for j in columns])
-        return (rows, columns, np.array(matrix_rows,dtype=int)) 
+        return (rows, columns, np.array(matrix_rows,dtype=int))
 
     with open(BASE_PATH+'PALIGN/{}_{}_{}_{}.pmatrix'.format(*pdbs),'w') as pmatrix_out:
         ##write column headers
         pmatrix_out.write('\t'+'\t'.join(map(str,columns))+'\n')
 
         ##write row header + values
-        for i in rows:            
+        for i in rows:
             pmatrix_out.write(f'{i}\t'+'\t'.join(map(str,(matrix[(i,j)] for j in columns)))+'\n')
 
 def readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2):
@@ -227,8 +218,6 @@ def generateAssistiveFiles(pdbs,write_intermediates=False):
     
     return ((similarity, no_overlap,len_seq1,len_seq2,score), makePmatrix(pdbs,int_1A,int_1B,int_2A,int_2B,write_intermediates))
 
-    
-
 
 def pcombine(pvalues,comb_method='fisher'):
     if not pvalues or not all(pvalues):
@@ -252,21 +241,17 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
         noverlap = sum(length) - len(align)
         needle_length = len(align)
         
-        
     if matrix_result:
-        row_headers,column_headers, matrix = matrix_result
+        _, _, matrix = matrix_result
 
     else:
         print('loading matrix manually')
-        column_headers,row_headers, matrix = readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2)
-
+        _, _, matrix = readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2)
 
     ##trivially no possible matches
     if any(i<2 for i in matrix.shape):
         ##REJECT CODE
         return (1,1,1, 1,1,1, 0,similarity,score,needle_length,noverlap)
-
-    #pmatrix = np.ones(matrix.shape)
 
     colsums,rowsums = np.meshgrid(*(np.sum(matrix,axis=I) for I in (1,0)),indexing='ij')
     
@@ -291,13 +276,8 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
 
     alignment_scores = findMinElements(val_matrix)
     alignment_scores_alt = findMinElements(val_matrix_alt)
-    #print(alignment_scores)
-    #print(alignment_scores_alt)
-    #print('over')
 
     return (pcombine(alignment_scores,'fisher'),pcombine(alignment_scores,'stouffer'),pcombine(list(pmatrix[1:,1:].flatten())),pcombine(alignment_scores_alt,'fisher'),pcombine(alignment_scores_alt,'stouffer'),pcombine(list(pmatrix_alt[1:,1:].flatten())),len(alignment_scores),similarity,score,needle_length,noverlap)
-
-
 
         
 from multiprocessing import Pool,Manager
@@ -333,11 +313,10 @@ def paralleliseAlignment(pdb_pairs,file_name):
             #results['{}_{}_{}_{}'.format(*key)]=p_value
             if p_value != 'error':
                 f_writer.writerow(['{0}_{1}_{4}_{2}_{3}_{5}'.format(*key),code]+[f'{n:.2e}' if isinstance(n,float) else str(n) for n in p_value])
-                
 
                 #results.append(('{}_{}_{}_{}'.format(*key),code)+p_value)
-                
             if progress and progress % 50000 == 0:
                 print(f'done another 50k ({progress})')
+
     print('Finished parallel mapping')
     return list(results)

@@ -3,8 +3,7 @@ import seaborn as sns
 import glob
 import pandas as pd
 import json
-import requests
-from collections import defaultdict, Counter
+from collections import defaultdict
 import numpy as np
 from itertools import product
 
@@ -15,8 +14,8 @@ from periodic import loadCSV
 from domains import readDomains, domainMatch
 
 def makeCSV(df,domain):
+    
     domain_dict=readDomains(domain)
-
     new_rows = []
 
     for _, row in df.iterrows():
@@ -82,13 +81,13 @@ def scrubInput(run_name,local_alignment=True,similarity=True,domain='SCOP'):
         rows_list.append(d)
     return pd.DataFrame(rows_list)
 
-def getBSAs(thresh='unfiltered'):
+def getBSAs(thresh='unfiltered',filter_immuno=False):
     df_het = loadCSV(f'Heteromers_{thresh}.csv')
-    bsa_het = convertH(df_het)
+    bsa_het = convertH(df_het,filter_immuno)
     bsa_het['shared2']= ['full' if x>0 else ('partial' if x>0 else 'none') for x in bsa_het['shared']] 
     
     df_hom = loadCSV(f'Homomers_{thresh}.csv')
-    bsa_hom= convertH(df_hom)
+    bsa_hom= convertH(df_hom,filter_immuno)
     #bsa_hom = pd.DataFrame(bsa.loc[bsa.shared=='full'])
     #bsa_hom.shared = 'hom'
     bsa_hom['shared2']= ['hom' if x>=0 else 'ignore' for x in bsa_hom['shared']]
@@ -102,11 +101,13 @@ def domainMatchF(domains,c1,c2):
     #print(set(domains[c1]) & set(domains[c2]))
     return len(duplicateIntersection(domains[c1],domains[c2])) / max(len(domains[c1]),len(domains[c2]))
     
-def convertH(df):
+def convertH(df,filter_immuno=False):
     rows = []
     for _,row in df.iterrows():
         for interface in row['interfaces']:
             rows.append({'id':f'{row["PDB_id"]}_{interface.replace("-","_")}','shared':domainMatchF(row['domains'],*interface.split('-')),'BSA':row['BSAs'][interface]})
+            if filter_immuno and rows[-1]['shared']>=0 and ('2.60.40.10') in row['domains'][interface[0]]:
+                del rows[-1]#print(row.PDB_id)
 
 
     df_h = pd.DataFrame(rows)
@@ -123,7 +124,8 @@ def plotDataX(data,stat_func=brunnermunzel):
     #g2 = sns.jointplot(x="TM", y="BSA",data=data,xlim=(0,1))
     #sns.relplot(x='TM', y='BSA', size="BSA",sizes=(40, 400),hue='domain', alpha=.75, height=6, data=data)
     plt.figure()
-    ax = sns.violinplot(x="shared2", y="BSA", data=data, palette="muted",scale="area",scale_hue=False,inner="quartile",cut=0)
+    data = data[(data.shared2=='full') | (data.shared2=='none')]
+    ax = sns.violinplot(x="shared2", y="BSA", hue='shared2',data=data, palette="muted",scale_hue=False,inner="quartile",cut=0,bw=.3,split='True')
 
     plt.yscale('log')
     plt.show(block=False)
@@ -437,10 +439,11 @@ def hexbin(x, y, color, **kwargs):
     print(np.median(x),np.mean(x))
 
 from scipy.stats import expon
+
 def hexIT(df,X_C='pval_S',Y_C='norm_OVR',sim_thresh=95,sigma=-1*np.log10(.05)):
     extent_codes = {'pval_F':(0,20),'pval_F2':(0,20),'pval_S':(0,20),'pval_S2':(0,20),'pval_T':(0,20),'pval_T2':(0,20),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3),'split':(0,3)}
 
-    df = df.loc[df['similarity'] < sim_thresh]
+    df = df.loc[df['similarity'] <= sim_thresh]
 
     var = np.var(df[X_C])#[df[X_C]>0][X_C])
     print(var)
@@ -452,37 +455,44 @@ def hexIT(df,X_C='pval_S',Y_C='norm_OVR',sim_thresh=95,sigma=-1*np.log10(.05)):
     #df.pval_S2 = df.pval_S2*-1
     #print(len(df_scaled))
     
-    #df_scaled.pval_S2 = df_scaled.pval_S2*-1
-    #print(df)
+    #fig=plt.figure()
 
-    g = sns.FacetGrid(df,hue="code", col="code", height=4,col_wrap=2,col_order=['MUT','MPA','DNO'])#MF','MP','FS','PS','FN','PN'])
-
+  
     
-    g.map(hexbin, X_C, Y_C, bins='log',gridsize=(100,100),mincnt=1,extent=extent_codes[X_C]+extent_codes[Y_C])
-    #g.map(sns.regplot,X_C,Y_C,truncate=True,robust=True)
-
-
-    sns.lmplot(x=X_C, y=Y_C, hue="code",hue_order=['DNO','MPA','MUT'], data=df, markers=["o", "P",'d'], palette={'MUT':'darkorange','DNO':'royalblue','MPA':'forestgreen'},scatter_kws={'alpha':.75,'s':150,'facecolor':'None','lw':3},robust=False,truncate=True)
+    ax=sns.lmplot(x=X_C, y=Y_C, hue="code",hue_order=['DNO','MPA','MUT'], data=df, markers=["o", "P",'d'], palette={'MUT':'darkorange','DNO':'royalblue','MPA':'forestgreen'},scatter_kws={'alpha':.75,'s':150,'facecolor':'None','lw':3},robust=False,truncate=True)
+    plt.plot([-np.log10(.05)]*2,[-1,2])
     #plt.plot([0,20],[0,-20],'k--',lw=3)
     #g.map(sns.residplot,data=df,x='pval_S2',y='norm_OVR',robust=True)
 
     plt.figure()
-    cdc= {'MUT':'orange','MPA':'g','DNO':'b'}
-    P_STARS = np.linspace(.1,25,500)
-    for code in ('MUT','MPA','DNO'):
+    cdc= {'MUT':('H','darkorange'),'MPA':('P','forestgreen'),'DNO':('p','royalblue')}
+    df.loc[df.code=='MPA',1]='MUT'
+    P_STARS = np.linspace(0,15,101)
+    for ind,code in enumerate(('MUT','MPA','DNO')):
         df_c = df[df.code==code].pval_S
+        if len(df_c)==0:
+            continue
+        print(code,len(df_c))
         cdf = []
         
         for p_star in P_STARS :
-            cdf.append(np.sum(df_c>p_star))
+            cdf.append(np.sum(df_c>=p_star))
 
-        cdf = np.array(cdf)/max(cdf)
-        plt.loglog(P_STARS,cdf,c=cdc[code])
+        cdf = np.log10(np.array(cdf)/max(cdf))
+        print(cdf[:2])
+        cdf = cdf[cdf>=np.log10(.01)]
+        cdf_sl = cdf[cdf>=np.log10(.01)]
+        plt.plot(P_STARS[:len(cdf)],cdf,c=cdc[code][1],marker=cdc[code][0],ms=20,mfc='None',mew=3,lw=3,ls='--',markevery=[-1])#,markevery=(ind/20,.15)
 
-        param, ptop = scipy.optimize.curve_fit(lambda t,a: np.exp(a*t),  P_STARS,  cdf)
+        slope, iner, *var = linregress(P_STARS[0:len(cdf_sl)],cdf_sl[0:])
 
-        plt.plot(P_STARS,np.exp(param[0]*P_STARS),ls='--',c=cdc[code])
+        print(slope)
+        print(var)
+        plt.plot(P_STARS[0:len(cdf)],slope*P_STARS[0:len(cdf)]+iner,':')
+        #param, ptop = scipy.optimize.curve_fit(lambda t,a: np.exp(a*t),  P_STARS,  cdf)
 
+        #plt.plot(P_STARS,np.exp(param[0]*P_STARS),ls='--',c=cdc[code])
+    #plt.yscale('log')
     plt.show(0)
 
 def plotGap(df,sigma=3,X_C='similarity',Y_C='gapX',H_C='norm_OVR'):

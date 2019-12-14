@@ -18,7 +18,7 @@ from itertools import combinations,product
 
 def scrapePDBs(df):
     with open('period_pdb_codes.txt', 'w') as file_out:
-          file_out.write(', '.join(df['PDB ID']))
+        file_out.write(', '.join(df['PDB ID']))
 
 
 
@@ -383,14 +383,21 @@ def generateAntiDomains(df,df2):
         anti_domains[pdb] = dict(antis)#{k:v for k,v in antis.items() if v and k in domains}
     return anti_domains
 
-def domainPairStatistics(df,df_HOM):
+def domainPairStatistics(df,df_HOM,ref_set=None):
 
+    if ref_set is not None:
+        ref_set = set(ref_set[ref_set.similarity<95].id)
     inverted_domains_HOM_full = invertCSVDomains(df_HOM)
 
     domain_triplets = defaultdict(lambda : [0,0,0,0])
 
     for ids, domains, interactions in zip(df['PDB_id'],df['domains'],df['interfaces']):
         for interaction in interactions:
+            if ref_set and f'{ids.upper()}_{interaction[0]}_{interaction[2]}_{ids.upper()}_{interaction[2]}_{interaction[0]}' not in ref_set and f'{ids.upper()}_{interaction[2]}_{interaction[0]}_{ids.upper()}_{interaction[0]}_{interaction[2]}' not in ref_set:
+                print('skip', f'{ids.upper()}_{interaction[0]}_{interaction[2]}_{ids.upper()}_{interaction[2]}_{interaction[0]}',list(ref_set)[0])
+                continue
+
+            
             local_domains = [domains[C] for C in interaction.split('-')]
             for subunit in interaction.split('-'):
                 local_domain = domains[subunit]
@@ -410,10 +417,14 @@ def domainPairStatistics(df,df_HOM):
         if tuple(local_domain) in inverted_domains_HOM_full:
             domain_triplets[local_domain][3]+=len(inverted_domains_HOM_full[tuple(local_domain)])
 
-    print([(k,v) for k,v in domain_triplets.items() if (v[0]+v[1]-v[2])<-50])
+    #print([(k,v) for k,v in domain_triplets.items() if (v[0]+v[1]-v[2])<-50])
     return np.array(list(domain_triplets.values()))
 
 from matplotlib.colors import LogNorm
+from matplotlib.cm import ScalarMappable
+import seaborn as sns
+from scipy.stats import spearmanr, linregress
+
 def plotStatRel(data_in):
     data = data_in.copy()
     data[:,0]+=data[:,1]
@@ -423,31 +434,107 @@ def plotStatRel(data_in):
     max_D = np.max((data[:,0].max(),data[:,2].max()))
     plt.plot([0,max_D],[0,max_D],'r--')
 
-    lowers = np.where(data[:,0]<data[:,2])[0]
-    highers = np.where(data[:,0]>data[:,2])[0]
+    #lowers = np.where(data[:,0]<data[:,2])[0]
+    #highers = np.where(data[:,0]>data[:,2])[0]
 
-    delta_up = np.sum(data[highers,3])/np.sqrt(2)
-    delta_down = np.sum(data[lowers,3])/np.sqrt(2)
+    #delta_up = np.sum(data[highers,3])/np.sqrt(2)
+    #delta_down = np.sum(data[lowers,3])/np.sqrt(2)
     #print(delta_up,delta_down)
 
     #print(data[highers,3])
     #print(data[lowers,3])
-    plt.figure()
+    
+    f,ax=plt.subplots()
 
-    data_src = np.array(sorted([(i[3],i[0]-i[2]) for i in data],reverse=True))
+    data_src = np.array(sorted([(i[3],i[0]-i[2],i[0]+i[2]) for i in data],reverse=True))
+
     markers = ['d' if delta > 0 else ('o' if delta==0 else 's') for delta in data_src[:,1]]
 
-    LN = LogNorm(1,data[:,0].max())
+    LN = LogNorm(1,max(data_src[:,2])*2)
     CV = plt.get_cmap('viridis')
-    
-    for i, (Y,c,m) in enumerate(zip(data_src[:,1],data_src[:,0],markers)):
+    data_scaled = [.1+np.log10(XX) if XX>0 else (-.1-np.log10(-XX) if XX<0 else 0) for XX in data_src[:,1]]
 
-        plt.scatter([i],[Y],marker=m,c=[CV(LN(c)) if c>0 else 'k'])#,cmap='viridis')#,c=c,marker=m,cmap='viridis',norm=LN)
-        
+    ax.axhline(.1,ls='--')
+    ax.axhline(-.1,ls='--')
+    
+    #return data_src
+    for i, (Y,c,m) in enumerate(zip(data_scaled,data_src[:,2],markers)):
+
+        plt.plot([i],[Y],marker=m,mec=CV(LN(c)) if c>0 else 'k',ms=10,mfc='None',mew=3)#,cmap='viridis')#,c=c,marker=m,cmap='viridis',norm=LN)
+
+    #slope, inter = linregress(range(len(data_scaled)),data_scaled)[:2]
+    #plt.plot(range(len(data_scaled)),[slope*rank+inter for rank in range(len(data_scaled))],'r--')
+    print(spearmanr(range(len(data_scaled)),data_src[:,1]))
+   
     #plt.scatter(range(len(data_src)),data_src[:,1],c=data_src[:,0],cmap='viridis',norm=LogNorm(),marker=markers)
+    scalar_map =ScalarMappable(norm=LogNorm(1,max(data_src[:,2])*2),cmap='viridis')
+    scalar_map.set_array(data_src[:,2])
+    f.colorbar(scalar_map,ax=ax)
+    plt.yticks([-2.1,-1.1,-.1,0,.1,1.1,2.1,3.1],['100','10','1','0','1','10','100','1000'])
+    ax.tick_params(direction='out', length=6, width=2)
     plt.show(0)
-    
+    #df = pandas.DataFrame(data_src,columns=['Hom','Het'])
+    #return df
+    #sns.lmplot('Hom','Het',data=df,lowess=True)
 
+
+def heteromericOverlapStats(df,df2):
+    homomeric_domains = set()
+
+    for domains in df2.domains:
+        homomeric_domains |= {arch for archs in domains.values() for arch in archs}
+
+
+    fractions = [[0,0],[0,0]]
+    for _,row in df.iterrows():
+
+        for interaction in row.interfaces:
+            local_domains = [row.domains[C] for C in interaction.split('-')]
+            ##HH type interaction
+            overlap_domains = set(local_domains[0]) & set(local_domains[1])
+            unique_domains = set(local_domains[0]) ^ set(local_domains[1])
+            
+
+            if overlap_domains:
+                fractions[0][any(od in homomeric_domains for od in set(overlap_domains))]+=1
+            else:
+                fractions[1][any(od in homomeric_domains for od in set(unique_domains))]+=1
+                
+                
+    print(f'Domain co-occurence\nHH: {fractions[0][0]}/{sum(fractions[0])} ({fractions[0][0]/sum(fractions[0]):.3f}%)\nDH: {fractions[1][0]}/{sum(fractions[1])} ({fractions[1][0]/sum(fractions[1]):.3f}%)')
+    return fractions
+
+    
+    
+def heteromericPathwayStats(df,df2):
+    counts = {}
+
+    for _,row in df.iterrows():
+        tc = [0,0,0]
+        for interaction in row.interfaces:
+            local_domains = [row.domains[C] for C in interaction.split('-')]
+            tc[duplicateIntersection(*local_domains) != ()]+=1
+        counts[row.PDB_id] = tc[:]
+
+    for _,row in df2.iterrows():
+        tc = [0,0,0]
+        for interaction in row.interfaces:
+            tc[2]+=1
+
+        if row.PDB_id in counts:
+            counts[row.PDB_id][2]=tc[2]
+        
+    #return counts
+    qq=np.array(list(counts.values()))
+    return qq
+    
+    plt.figure()
+    plt.hist2d(*qq.T,bins=[np.linspace(0,50,51)]*2,norm=LogNorm())
+    plt.colorbar()
+    plt.show(0)
+            
+
+        
 def shuffledInteractionDomains(df):
 
     table_of_observations = [[0,0],[0,0]]

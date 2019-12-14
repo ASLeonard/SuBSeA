@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys
+
 import json
 import requests
 from collections import defaultdict, Counter
@@ -27,18 +27,18 @@ def writeDomains(pdb_list,class_type='SCOP',fname=None):
     domains={pdb.lower(): pullDomains(pdb.lower(),class_type) for pdb in pdb_list}
 
     ##write to json file
+    print(f'writing to {fname}')
     with open(fname or f'domain_architectures_{class_type}.json', 'w') as file_out:
         file_out.write(json.dumps(domains))
 
 def readDomains(file_name='SCOP'):
-     with open(f'domain_architectures_{file_name}.json') as f:
+     with open(file_name if '.json' in file_name else f'domain_architectures_{file_name}.json') as f:
           return json.load(f)
 
 
 def getUniqueHomodimerDomains(top_X=None):
      counted_domains=Counter([tuple(v) for vals in readDomains('HCath').values() for v in vals.values()])
      return counted_domains.most_common(top_X)
-     #return zip(*counted_domains.most_common(top_X))
 
 
 def domainMatch(data,c1,c2):
@@ -59,10 +59,12 @@ def invertDomains(domains,partials=False):
 
     for pdb_id, domain_info in domains.items():
         for chain, domains in domain_info.items():
+            if isinstance(domains,list):
+                domains = tuple(domains)
             if partials:
                 for domain in set(domains):
                     inverted[domain].append(f'{pdb_id}_{chain}')
-            else:        
+            else:
                 inverted[domains].append(f'{pdb_id}_{chain}')
 
     return dict(inverted)

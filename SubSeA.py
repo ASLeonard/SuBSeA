@@ -14,7 +14,8 @@ import scipy.special
 import requests
 
 
-BASE_PATH, FASTA_PATH = '', ''
+BASE_PATH, FASTA_PATH, INT_PATH, PALIGN_PATH, NEEDLE_PATH = '', '', '', '', ''
+needle_exec = ''
 
 def pullFASTA(pdb,chain):
     for _ in range(3):
@@ -39,18 +40,18 @@ def pullFASTA(pdb,chain):
     
 ##run needle alignment on two pbd_chain inputs
 def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
-    if os.path.exists(f'{BASE_PATH}NEEDLE/{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle'):
+    if os.path.exists(f'{BASE_PATH}{NEEDLE_PATH}{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle'):
         return True
 
     for pdb, chain in ((pdb_1,chain_1),(pdb_2,chain_2)):
-        file_name = f'{BASE_PATH}{FASTA_PATH}/{pdb}_{chain}.fasta.txt'
+        file_name = f'{BASE_PATH}{FASTA_PATH}{pdb}_{chain}.fasta.txt'
         if os.path.exists(file_name) and os.path.getsize(file_name) > 20:
             continue
 
         ##see if fasta info is in given file
         try:
             with open(f'{BASE_PATH}{FASTA_PATH}{pdb}_{chain}.fasta.txt','w') as fasta_file:
-                subprocess.run(['grep', '-i','-A1',f'{pdb}_{chain}', f'{BASE_PATH}{FASTA_PATH}cleaned2_all_fasta.txt'],check=True,stdout=fasta_file)
+                subprocess.run(['grep', '-i','-A1',f'{pdb}_{chain}', f'{BASE_PATH}{FASTA_PATH}all_fasta.txt'],check=True,stdout=fasta_file)
                 
         except subprocess.CalledProcessError as e:
             ##could not find FASTA data in all_fasta file, try downloading
@@ -58,15 +59,16 @@ def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
             if not pullFASTA(pdb,chain):
                 raise ValueError(f'Chain does not seem to exist for {pdb}_{chain}')
     
+    print('about to run needle')
     try:
-        subprocess.run([f'{needle_EXEC}', f'{BASE_PATH}{FASTA_PATH}{pdb_1}_{chain_1}.fasta.txt', f'{BASE_PATH}{FASTA_PATH}{pdb_2}_{chain_2}.fasta.txt', '-auto', '-outfile', f'{BASE_PATH}NEEDLE/{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle'],check=True)
+        subprocess.run([f'{needle_EXEC}', f'{BASE_PATH}{FASTA_PATH}{pdb_1}_{chain_1}.fasta.txt', f'{BASE_PATH}{FASTA_PATH}{pdb_2}_{chain_2}.fasta.txt', '-auto', '-outfile', f'{BASE_PATH}{NEEDLE_PATH}{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle'],check=True)
     except subprocess.CalledProcessError as e:
         print('Needle based error:\n',e,'\nRaising now')
 
 
 def makeTypes(pdb,chain_1=None,chain_2=None):
     type_ = {}
-    with open(BASE_PATH+f'INT/{pdb}.int') as file_:
+    with open(f'{BASE_PATH}{INT_PATH}{pdb}.int') as file_:
         for line_raw in file_:
             line = line_raw.split('\t')
             chain,res = line[:2]
@@ -75,7 +77,7 @@ def makeTypes(pdb,chain_1=None,chain_2=None):
 
             if chain_1 and chain_2:
                 interactions = [interaction for interaction in interactions if (interaction[0][0]==chain_2 and interaction[1][0]==chain_1)]
-                
+
             if interactions:
                 interactions.sort(key=itemgetter(2),reverse=True)
                 interactions.sort(key=itemgetter(0))
@@ -88,7 +90,7 @@ def readNeedle(pdbs):
     read = 0
     similarity, score = None, None
 
-    with open(BASE_PATH+'NEEDLE/{}_{}_{}_{}.needle'.format(*pdbs)) as file_:
+    with open(f'{BASE_PATH}{NEEDLE_PATH}'+'{}_{}_{}_{}.needle'.format(*pdbs)) as file_:
         for line in file_:
             ##can skip empty or commented lines in .needle file
             if line == '\n' or line[0] == '#':
@@ -144,7 +146,7 @@ def makeInteractions(type_, seq, chain):
 
 def writePialign(pdbs,inter1a,inter1b,inter2a,inter2b,align,seq1,seq2):
     iter_chunk=50
-    with open(BASE_PATH+'PALIGN/{}_{}_{}_{}.pialign'.format(*pdbs),'w') as pialign_out:
+    with open(f'{BASE_PATH}{PALIGN_PATH}'+'{}_{}_{}_{}.pialign'.format(*pdbs),'w') as pialign_out:
         idx, idx_A, idx_B = 0,0,0
         for idx in range(0,max(len(seq1),len(seq2)),iter_chunk):
             slice_ = slice(idx,idx+iter_chunk)
@@ -172,7 +174,8 @@ def makePmatrix(pdbs,inter1a,inter1b,inter2a,inter2b,write=True):
             matrix_rows.append([matrix[(i,j)] for j in columns])
         return (rows, columns, np.array(matrix_rows,dtype=int))
 
-    with open(BASE_PATH+'PALIGN/{}_{}_{}_{}.pmatrix'.format(*pdbs),'w') as pmatrix_out:
+    print('Writing matrix to file')
+    with open(f'{BASE_PATH}{PALIGN_PATH}'+'{}_{}_{}_{}.pmatrix'.format(*pdbs),'w') as pmatrix_out:
         ##write column headers
         pmatrix_out.write('\t'+'\t'.join(map(str,columns))+'\n')
 
@@ -181,7 +184,7 @@ def makePmatrix(pdbs,inter1a,inter1b,inter2a,inter2b,write=True):
             pmatrix_out.write(f'{i}\t'+'\t'.join(map(str,(matrix[(i,j)] for j in columns)))+'\n')
 
 def readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2):
-    tsv = np.loadtxt(BASE_PATH+'PALIGN/{}_{}_{}_{}.pmatrix'.format(pdb_1,chain_1,pdb_2,chain_2),dtype=str,delimiter='\t')
+    tsv = np.loadtxt(f'{BASE_PATH}{PALIGN_PATH}{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.pmatrix',dtype=str,delimiter='\t')
     column_headers = tsv[0, 1:]
     row_headers = tsv[1:, 0]
     matrix = tsv[1:, 1:].astype(int)
@@ -196,7 +199,7 @@ def readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2):
 def generateAssistiveFiles(pdbs,write_intermediates=False):
     if write_intermediates:
         print('Writing intermediates')
-    needleAlign(*pdbs[:4],needle_EXEC='/rscratch/asl47/needle')
+    needleAlign(*pdbs[:4])
 
     type1 = makeTypes(pdbs[0],pdbs[1],None if len(pdbs)<6 else pdbs[4])
     type2 = makeTypes(pdbs[2],pdbs[3],None if len(pdbs)<6 else pdbs[5])
@@ -235,7 +238,7 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
         similarity, noverlap, *length, score  = needle_result
         needle_length = sum(length) - noverlap
     else:
-        print('loading needle manually')
+        print('Loading needle manually')
         (seq1,seq2),align, similarity, score = readNeedle([pdb_1,chain_1,pdb_2,chain_2])
         length = (sum(c.isalpha() for c in seq) for seq in (seq1,seq2))
         noverlap = sum(length) - len(align)
@@ -243,9 +246,8 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
         
     if matrix_result:
         _, _, matrix = matrix_result
-
     else:
-        print('loading matrix manually')
+        print('Loading matrix manually')
         _, _, matrix = readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2)
 
     ##trivially no possible matches
@@ -297,7 +299,7 @@ def paralleliseAlignment(pdb_pairs,file_name):
     print('Parellelising alignment')
 
     columns = ['id','code','pval_F','pval_S','pval_T','pval_F2','pval_S2','pval_T2','hits','similarity','score','align_length','overlap']
-    
+
     results = Manager().list()
     with Pool() as pool, open(f'/rscratch/asl47/PDB_results/{file_name}_comparison.csv','w', newline='') as csvfile:
         f_writer = csv.writer(csvfile)

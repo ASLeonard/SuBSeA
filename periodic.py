@@ -8,13 +8,27 @@ from utility import loadCSV, invertCSVDomains
 import pandas
 from numpy.random import randint, choice
 from collections import defaultdict, Counter
-import sys
 import os
 import json
 import argparse
 import matplotlib.pyplot as plt
 import numpy as np
-from itertools import combinations,product
+from itertools import product
+
+def heteromericInteractionRunner(df_het):
+    comparisons_to_make = []
+
+    for _, row in df_het.iterrows():
+        domains = row['domains']
+
+        for interaction_pair in row['interfaces']:
+            subunits = interaction_pair.split('-')
+            mutual_domains = duplicateIntersection(*(domains[C] for C in subunits))
+            code = ('MUT' if domains[subunits[0]]== domains[subunits[1]] else 'MPA') if mutual_domains else 'DNO'              
+            comparisons_to_make.append((f'{row["PDB_ID"]}_{subunits[0]}_{subunits[1]}',f'{row["PDB_ID"]}_{subunits[1]}_{subunits[0]}',code))
+
+    return comparisons_to_make
+
 
 def scrapePDBs(df):
     with open('period_pdb_codes.txt', 'w') as file_out:
@@ -88,7 +102,6 @@ def domainSubunitRewire(df):
     #chi2_contingency(obs, lambda_="log-likelihood")
     return 'dead'
 
-from collections import Counter
 def duplicateIntersection(domain_1, domain_2):
     overlap = Counter(domain_1) & Counter(domain_2)
     return tuple(dom for dom in sorted(overlap.elements()))
@@ -108,28 +121,7 @@ def conv(dq):
 
     return pandas.DataFrame(a)
 
-def sharedMatchingAlgorithm3(df_HET):
-    
-    comparisons_to_make = []
-    fail_c = 0
-    for _, row in df_HET.iterrows():
-        
-        pdb = row['PDB_id']
-        domains = row['domains']
-        interactions = row['interfaces']
 
-        for interaction_pair in interactions:
-            subunits = interaction_pair.split('-')
-            mutual_domains = duplicateIntersection(*(domains[C] for C in subunits))
-            
-            if mutual_domains:
-                code = 'MUT' if domains[subunits[0]]== domains[subunits[1]] else 'MPA'
-                
-            else:
-                code = 'DNO'
-                
-            comparisons_to_make.append((f'{pdb}_{subunits[0]}_{subunits[1]}',f'{pdb}_{subunits[1]}_{subunits[0]}',code))
-    return comparisons_to_make
                     
                     
 
@@ -180,46 +172,6 @@ def sharedMatchingAlgorithm2(df_HET, df_HOM):
     return comparisons_to_make
                     
 
-def filterDataset(df,thresh,hom_mode=False):
-    if thresh not in {50,70,90}:
-        print('not implemented')
-        return
-    
-    with open(f'PDB_clusters_{thresh}.txt') as cluster_file:
-        redundant_pdbs = [set(line.split()) for line in cluster_file]
-
-
-    used_cluster_interactions = set()
-    new_df = []
-    
-    for _,row in df.iterrows():
-        pdb = row['PDB_id']
-        unique_interactions = []
-
-        
-        for interaction_pair in row['interfaces']:
-            cluster_indexes = []
-            for chain in interaction_pair.split('-'):
-                for index, cluster in enumerate(redundant_pdbs):
-                    if f'{pdb.upper()}_{chain}' in cluster:
-                        cluster_indexes.append(index)
-                        break
-
-            cluster_indexes = tuple(cluster_indexes)
-            if hom_mode and cluster_indexes[0]!=cluster_indexes[1]:
-                print('not right',pdb, interaction_pair)
-            
-            if cluster_indexes not in used_cluster_interactions:
-                used_cluster_interactions.add(cluster_indexes)
-                unique_interactions.append(interaction_pair)
-
-        if unique_interactions:
-            flat_chains = {C for pair in unique_interactions for C in pair.split('-')}
-            new_df.append({'PDB_id':pdb,'interfaces':unique_interactions,'BSAs':{pair:row['BSAs'][pair] for pair in unique_interactions},'domains':{C:row['domains'][C] for C in flat_chains}})
-
-    return pandas.DataFrame(new_df)
-    
-    
 
     
 

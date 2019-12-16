@@ -2,18 +2,9 @@ from SubSeA import pullFASTA
 from domains import pullDomains
 import json
 
-def swapT(df,df2):
-    rows = []
-    for _,row in df.iterrows():
-        row2 = df2.loc[df2['PDB_id']==row['PDB_id']]
-        if row2 is not None:
-            try:
-                rows.append({'PDB_id':row['PDB_id'], 'interfaces':row['interfaces'],'domains':row['domains'],'BSAs':row2['BSAs'].values[0]})
-            except:
-                print(row2['BSAs'])
-        else:
-            print(row)
-    return rows
+VALID_THRESHOLDS = {30,40,50,60,70,80,90,95,100}
+
+##download file and then clean overall method
 
 def formatBulkFASTA(fname,out_name=None):
     if not out_name:
@@ -36,7 +27,6 @@ def formatBulkFASTA(fname,out_name=None):
                 pdb, sequence = None, ''
             elif pdb:
                 sequence += line.rstrip()
-
 
 def loadCSV(fname):
     df = pandas.read_csv(fname,index_col=False)
@@ -63,6 +53,9 @@ def loadCSV(fname):
         
     return pandas.DataFrame(rr)
 
+def writeCSV(df,fname):
+    df.to_csv(fname,index=False,columns=['PDB_id','interfaces','domains','BSAs'])
+    
 from domains import readDomains, invertDomains
 
 def invertCSVDomains(df, partials=False, homomeric=False):
@@ -78,43 +71,17 @@ def invertCSVDomains(df, partials=False, homomeric=False):
 import pandas
 from statistics import mean
 
-def getBadIDs(dx=None,raw_table=None):
-    if raw_table is None:
-        raw_table  = pandas.read_csv('Periodic_heteromers3.csv',index_col=False)
-    if not dx:
-        ps = list(raw_table['PDB_id'])
-        lx= [] 
-        for line in open('/scratch/asl47/PDB/FASTA/cleaned2_all_fasta.txt','r'):
-            if '>' in line and line.rstrip()[1:5].lower() in ps:
-                lx.append(line.rstrip()[1:])
+def makeDatasets(heteromeric=True, threshold=100):
+    data = mergeSheets(heteromeric,1,1,0)
+    post_filter = filterDataset(data,threshold)
+    writeCSV(('Heteromeric' if heteromeric else 'Homomeric')+f'_{threshold}'})
 
-        dx = defaultdict(list)
-        for ix in lx:
-            dx[ix[:4].lower()].append(ix[-1])
-        return dx
-    
-    bad_s=[]
+def downloadPeriodicData(fpath=''):
+    print(f'Downloading periodic data from Science')
+    urllib.request.urlretrieve('https://science.sciencemag.org/highwire/filestream/671215/field_highwire_adjunct_files/3/aaa2245-Ahnert-SM-table-S2.xlsx', f'{fpath}PeriodicTable.xlsx')
+    print(f'Download successful')    
 
-    #raw_table  = pandas.read_csv('Periodic_heteromers3.csv',index_col=False)
-    for _,row in raw_table.iterrows():
-        #row['interfaces'] = eval(row['interfaces'].values[0])
-        #row['interfaces'] = {i for i in row['interfaces'][2:-2].split('\', \'')}
-        interfaces = {chain for interaction in row['interfaces'] for chain in interaction.split('-')}
-        for inx in interfaces:
-            if inx not in dx[row['PDB_id']]:
-                bad_s.append('{}_{}'.format(row['PDB_id'],inx))
-    return bad_s
-
-def nextWave(bads):
-    super_bad = []
-    for bad in bads:
-        if not fullFASTA('/scratch/asl47/PDB/FASTA/{}.fasta.txt'.format(bad.upper())):
-            pullFASTA(*bad.split('_'))
-            if not fullFASTA('/scratch/asl47/PDB/FASTA/{}.fasta.txt'.format(bad.upper())):
-                super_bad.append(bad)
-    return super_bad
-
-def mergeSheets(heteromerics=True,use_identical_subunits=True,relabel=True):
+def mergeSheets(heteromerics=True,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=True):
 
     DEX_interface = 'T' if heteromerics else 'I'
 
@@ -123,22 +90,27 @@ def mergeSheets(heteromerics=True,use_identical_subunits=True,relabel=True):
     interface_BSA= 'List of interface sizes (Angstroms^2)'
 
     assembly_SYM = 'Symmetry group (M - monomer; Dna - dihedral with heterologous interfaces; Dns - dihedral with only isologous interfaces; Ts - tetrahedral with isologous interfaces; Ta - tetrahedral with only heterologous interfaces; O* - 4 different octahedral topologies)'
-
-    redundant = 'Included in non-redundant set'
     
     data_heteromers = pandas.read_excel('~/Downloads/PeriodicTable.xlsx',sheet_name=[0,2])
 
-    domain_dict=readDomains('periodic2')
-    
-    chain_map = chainMap() if relabel else {}
-    chain_mapE = chainMap('Extra') if relabel else {}
-    chain_map_full = {**chain_map,**chain_mapE}
+    try:
+        domain_dict=readDomains('periodic2')
+    except FileNotFoundError:
+        print('given domain file doesn\'t exist, will start new one')
+        domain_dict={}
+
+    try:
+        chain_map = chainMap() if relabel else {}
+        chain_mapE = chainMap('Extra') if relabel else {}
+        chain_map_full = {**chain_map,**chain_mapE}
+    except FileNotFoundError:
+        print('Chain relabelling doesn\'t exist, using blank')
+        chain_map_full = {}
+        
     new_rows = []
 
     for data in data_heteromers.values():
-        for i, row in data.iterrows():
-            #if redundant in row and row[redundant] == 0:
-            #    continue
+        for _, row in data.iterrows():
             PDB_code = row['PDB ID']
 
             if assembly_SYM in row and row[assembly_SYM] == 'M':
@@ -152,9 +124,7 @@ def mergeSheets(heteromerics=True,use_identical_subunits=True,relabel=True):
                     continue
 
                 if PDB_code in chain_map_full:
-                    
-                    #homomeric mapping probably
-                    #if len(set(chain_map_full[PDB_code].values()))!=1:
+
                     new_interfaces = row[interface_LIST].lower()
                     for swaps in chain_map_full[PDB_code].items():
                         new_interfaces=new_interfaces.replace(swaps[0].lower(),swaps[1])
@@ -175,9 +145,10 @@ def mergeSheets(heteromerics=True,use_identical_subunits=True,relabel=True):
 
                 BSA_av = {K:round(mean(V)) for K,V in BSAs.items()}
 
-                if PDB_code not in domain_dict:
+                if not DEBUG_ignore_domains and PDB_code not in domain_dict:
                     print('pulling for ',PDB_code)
                     domain_dict[PDB_code] = pullDomains(PDB_code)
+                
 
                 original_length = len(meaningful_interfaces)
                 for index,interface in enumerate(meaningful_interfaces[:]):
@@ -186,24 +157,38 @@ def mergeSheets(heteromerics=True,use_identical_subunits=True,relabel=True):
                 if not meaningful_interfaces:
                     continue
                 
-                domain_info = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
+                if DEBUG_ignore_domains:
+                    domain_info = ''
+                else:
+                    domain_info = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
                 
                 new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info, 'BSAs': str({K:BSA_av[K] for K in meaningful_interfaces})})
 
-                
-    with open('domain_architectures_periodic2.json', 'w') as file_out:
-        file_out.write(json.dumps(domain_dict))
+    if not DEBUG_ignore_domains:
+        with open('domain_architectures_periodic2.json', 'w') as file_out:
+            file_out.write(json.dumps(domain_dict))
 
     return pandas.DataFrame(new_rows)
 
-def filterDataset(df,thresh,hom_mode=False):
-    if thresh not in {50,70,90}:
-        print('not implemented')
-        return
-    
-    with open(f'PDB_clusters_{thresh}.txt') as cluster_file:
-        redundant_pdbs = [set(line.split()) for line in cluster_file]
+## Download pre-made PDB clusters for protein subunits
+def downloadClusters(threshold):
+    assert threshold in VALID_THRESHOLDS, 'Invalid cluster threshold'
+    print(f'Downloading PDB clustering @ {threshold}')
+    urllib.request.urlretrieve(f'ftp://resources.rcsb.org/sequence/clusters/bc-{threshold}.out', f'PDB_clusters_{threshold}')
+    print(f'Download successful')
 
+    
+## Filter dataset at a specific redundancy level
+def filterDataset(df,thresh,hom_mode=False):
+    assert thresh in VALID_THRESHOLDS, f'Not implemented for threshold value: {thresh}'
+
+    cluster_file_path = f'PDB_clusters_{thresh}.txt'
+
+    if not os.path.exists(cluster_file_path):
+        downloadClusters(thresh)
+        
+    with open(cluster_file_path) as cluster_file:
+        redundant_pdbs = [set(line.split()) for line in cluster_file]
 
     used_cluster_interactions = set()
     new_df = []
@@ -211,7 +196,6 @@ def filterDataset(df,thresh,hom_mode=False):
     for _,row in df.iterrows():
         pdb = row['PDB_id']
         unique_interactions = []
-
         
         for interaction_pair in row['interfaces']:
             cluster_indexes = []
@@ -223,7 +207,7 @@ def filterDataset(df,thresh,hom_mode=False):
 
             cluster_indexes = tuple(cluster_indexes)
             if hom_mode and cluster_indexes[0]!=cluster_indexes[1]:
-                print('not right',pdb, interaction_pair)
+                print('Error, cannot be homomeric interaction but different clusters', pdb, interaction_pair)
             
             if cluster_indexes not in used_cluster_interactions:
                 used_cluster_interactions.add(cluster_indexes)
@@ -322,6 +306,54 @@ def wrFE(rm):
             tw+='\t'.join((pdb,A,B))+'\n'
     return tw
 
+def getBadIDs(dx=None,raw_table=None):
+    if raw_table is None:
+        raw_table  = pandas.read_csv('Periodic_heteromers3.csv',index_col=False)
+    if not dx:
+        ps = list(raw_table['PDB_id'])
+        lx= [] 
+        for line in open('/scratch/asl47/PDB/FASTA/cleaned2_all_fasta.txt','r'):
+            if '>' in line and line.rstrip()[1:5].lower() in ps:
+                lx.append(line.rstrip()[1:])
+
+        dx = defaultdict(list)
+        for ix in lx:
+            dx[ix[:4].lower()].append(ix[-1])
+        return dx
+    
+    bad_s=[]
+
+    #raw_table  = pandas.read_csv('Periodic_heteromers3.csv',index_col=False)
+    for _,row in raw_table.iterrows():
+        #row['interfaces'] = eval(row['interfaces'].values[0])
+        #row['interfaces'] = {i for i in row['interfaces'][2:-2].split('\', \'')}
+        interfaces = {chain for interaction in row['interfaces'] for chain in interaction.split('-')}
+        for inx in interfaces:
+            if inx not in dx[row['PDB_id']]:
+                bad_s.append('{}_{}'.format(row['PDB_id'],inx))
+    return bad_s
+
+def nextWave(bads):
+    super_bad = []
+    for bad in bads:
+        if not fullFASTA('/scratch/asl47/PDB/FASTA/{}.fasta.txt'.format(bad.upper())):
+            pullFASTA(*bad.split('_'))
+            if not fullFASTA('/scratch/asl47/PDB/FASTA/{}.fasta.txt'.format(bad.upper())):
+                super_bad.append(bad)
+    return super_bad
+
+def swapT(df,df2):
+    rows = []
+    for _,row in df.iterrows():
+        row2 = df2.loc[df2['PDB_id']==row['PDB_id']]
+        if row2 is not None:
+            try:
+                rows.append({'PDB_id':row['PDB_id'], 'interfaces':row['interfaces'],'domains':row['domains'],'BSAs':row2['BSAs'].values[0]})
+            except:
+                print(row2['BSAs'])
+        else:
+            print(row)
+    return rows
 
 
 if __name__ == "__main__":
@@ -330,4 +362,5 @@ if __name__ == "__main__":
         for i in (50,70,90):
             f = filterDataset(df,i)
             f.to_csv(f'{c}_{i}.csv',index=False,columns=['PDB_id','interfaces','domains','BSAs'])
-        
+
+            

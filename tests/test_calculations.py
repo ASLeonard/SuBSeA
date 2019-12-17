@@ -20,7 +20,7 @@ def test_SuBSeA(capsys):
 
     print('Getting files needed')
     pisa_XML.pullXML(['1A00','1BND'])
-    for pdb, chains in (('1A00',('C','D')),('1BDN',('A','B'))):
+    for pdb, chains in (('1A00',('C','D')),('1BND',('A','B'))):
         for chain in chains:
             SubSeA.pullFASTA(pdb,chain)
     

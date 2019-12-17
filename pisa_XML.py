@@ -157,7 +157,7 @@ def main(args):
 
     if not (os.path.isdir(f'{BASE_PATH}{XML_PATH}') and os.path.isdir(f'{BASE_PATH}{INT_PATH}')):
         print('Data folders are not configured correctly.\nPlease ensure XML and INT folders exist and rerun')
-        return        
+        return
 
     if args.file_format: ##default text file
         pullXML(args.file_name)

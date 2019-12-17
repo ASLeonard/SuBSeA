@@ -1,17 +1,18 @@
 from SubSeA import pullFASTA
 from domains import pullDomains
 
+from collections import defaultdict
 import os
 import json
 import gzip
 import shutil
 import urllib.request
+import ast
 
 
 VALID_THRESHOLDS = {30,40,50,60,70,80,90,95,100}
 
 ##download file and then clean overall method
-#
 def downloadAllFASTA_GZ(fpath=''):
     print('Downloading compressed all seqres from PDB')
     urllib.request.urlretrieve('ftp://ftp.wwpdb.org/pub/pdb/derived_data/pdb_seqres.txt.gz', f'{fpath}all_fasta.txt.gz')
@@ -24,6 +25,7 @@ def downloadAllFASTA_GZ(fpath=''):
     os.remove(f'{fpath}all_fasta.txt.gz')
     formatBulkFASTA(fpath,'all_fasta.txt')
     print(f'All FASTA sequences formatted into "{fpath}minimal_all_fasta.txt"')
+    os.remove(f'{fpath}all_fasta.txt')
     
 
 def formatBulkFASTA(fpath,fname,out_name=None):
@@ -50,23 +52,23 @@ def formatBulkFASTA(fpath,fname,out_name=None):
 def loadCSV(fname):
     df = pandas.read_csv(fname,index_col=False)
     rr=[]
-    for index,row in df.iterrows():
+    for _,row in df.iterrows():
 
         interfaces = row['interfaces']
         if isinstance(interfaces,str):
             if '[' in interfaces:
-                row['interfaces'] = eval(interfaces)
+                row['interfaces'] = ast.literal_eval(interfaces)
             else:
                 row['interfaces'] = set(interfaces.split('-'))
         else:
-            row['interfaces'] = eval(row['interfaces'].values[0])
+            row['interfaces'] = ast.literal_eval(row['interfaces'].values[0])
         if '{' in row['domains']:
-            row['domains'] = eval(row['domains'])
+            row['domains'] = ast.literal_eval(row['domains'])
         else:
-            row['domains'] = {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in row['domains'].split(';') if len(dom)>1}
+            row['domains'] = {dom.split(':')[0]:ast.literal_eval(dom.split(':')[1]) for dom in row['domains'].split(';') if len(dom)>1}
             
 
-        row['BSAs'] = eval(row['BSAs'])
+        row['BSAs'] = ast.literal_eval(row['BSAs'])
         #df.iloc[index] = row
         rr.append(row)
         
@@ -101,12 +103,11 @@ def makeDatasets(fpath='',heteromeric=True, threshold=100):
     post_filter = filterDataset(data,threshold)
     writeCSV(post_filter,('Heteromeric' if heteromeric else 'Homomeric')+f'_complexes_{threshold}.csv')
 
-
-
 def downloadPeriodicData(fpath=''):
     print(f'Downloading periodic data from Science')
-    urllib.request.urlretrieve('https://science.sciencemag.org/highwire/filestream/671215/field_highwire_adjunct_files/3/aaa2245-Ahnert-SM-table-S2.xlsx', f'{fpath}PeriodicTable.xlsx')
-    print(f'Download successful')    
+    urllib.request.urlretrieve('https://science.sciencemag.org/highwire/filestream/671215/' +
+    'field_highwire_adjunct_files/3/aaa2245-Ahnert-SM-table-S2.xlsx', f'{fpath}PeriodicTable.xlsx')
+    print(f'Download successful')
 
 def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=True):
 
@@ -116,7 +117,9 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
     interface_LIST = 'List of interface types (all identical subunits are given the same code)' if use_identical_subunits else 'List of interfaces'
     interface_BSA= 'List of interface sizes (Angstroms^2)'
 
-    assembly_SYM = 'Symmetry group (M - monomer; Dna - dihedral with heterologous interfaces; Dns - dihedral with only isologous interfaces; Ts - tetrahedral with isologous interfaces; Ta - tetrahedral with only heterologous interfaces; O* - 4 different octahedral topologies)'
+    assembly_SYM = ('Symmetry group (M - monomer; Dna - dihedral with heterologous interfaces;' +
+    'Dns - dihedral with only isologous interfaces; Ts - tetrahedral with isologous interfaces;' +
+    'Ta - tetrahedral with only heterologous interfaces; O* - 4 different octahedral topologies)')
     
     data_heteromers = pandas.read_excel(f'{fpath}PeriodicTable.xlsx',sheet_name=[0,2])
 
@@ -159,7 +162,8 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
 
                 all_interfaces = zip(row[interface_LIST].split(','),row[interface_KEY].split(','))
                 
-                meaningful_interfaces = list({'-'.join(sorted(interface.split('-'))) for (interface,type_) in all_interfaces if (type_ == DEX_interface and (not heteromerics or interface[0] != interface[2]))})
+                meaningful_interfaces = list({'-'.join(sorted(interface.split('-'))) for (interface,type_) in all_interfaces
+                                            if (type_ == DEX_interface and (not heteromerics or interface[0] != interface[2]))})
 
                 if not meaningful_interfaces:
                     continue
@@ -187,10 +191,12 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
                 if DEBUG_ignore_domains:
                     domain_info = ''
                 else:
-                    domain_info_raw = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
+                    domain_info_raw = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] 
+                        else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
                     domain_info = {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in domain_info_raw.split(';') if len(dom)>1}
                 
-                new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info, 'BSAs': {K:BSA_av[K] for K in meaningful_interfaces}})
+                new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':dsomain_info,
+                    'BSAs': {K:BSA_av[K] for K in meaningful_interfaces}})
 
     if not DEBUG_ignore_domains:
         with open('domain_architectures_periodic2.json', 'w') as file_out:
@@ -255,140 +261,5 @@ def chainMap(extra=None):
             chainmap[pdb][file_chain] = pdb_chain
     return dict(chainmap)
 
-from collections import defaultdict
-
-def fullFASTA(file_name):
-    return os.path.exists(file_name) and os.path.getsize(file_name)
-
-
-def chainFull():
-    chainmap = {}
-    fc = open('chain_map.txt')
-    for line in fc:
-        l = line.strip().split('\t')
-        if l[0].upper() not in chainmap:
-            chainmap[l[0].upper()] = {}
-        chainmap[l[0].upper()][l[1]] = l[2]
-
-    chainmapset = set(chainmap.keys())
-
-    chainset = defaultdict(list)
-    fc2 = open('pdb_chains.txt')
-    for line in fc2:
-        l = line.strip().split('\t')
-        chainset[l[0].upper()].append(set(l[1].split()))
-    #return chainset
-        
-    pfaml = {}
-    fp = open('pdb_pfam_mapping.txt')
-    fp.readline()
-    for line in fp:
-        l = line.strip().split('\t')
-        if l[0] not in pfaml:
-            pfaml[l[0]] = defaultdict(list)
-        if l[0] in chainmap:
-            for i in chainmap[l[0]]:
-                for j in chainset[l[0]]:
-                    if l[1] in j and chainmap[l[0]][i] in j:
-                        pfaml[l[0]][i].append(l[4])
-        else:
-            pfaml[l[0]][l[1]].append(l[4])
-
-    pfam = {}
-    for i in pfaml:
-        if len(pfaml[i]) > 0:
-            pfam[i] = {}
-            for j in pfaml[i]:
-                pfam[i][j] = ';'.join(sorted(list(pfaml[i][j])))
-    return chainmap,chainmapset,pfaml,pfam
-
-
-def fixEm(pchains,fixables,df):
-    rev_map=defaultdict(dict)
-    for fix in fixables:
-        inters = eval(df.loc[df['PDB_id']==fix[:4]]['interfaces'].values[0])
-        #print(inters)
-        #return
-        pch = pchains[fix[:4].upper()]
-        pch = [i for j in  pch for i in j]
-        inters2= [i for j in inters for i in j.split('-')]
-        #print(pch,inters2)
-        if len(inters2) == 2 and len(pch)==2:
-            #return fix
-            #dif1 = set(inters2)-set(pch)
-            #dif2 = set(pch) - set(inters2)
-            #if len(dif1) == 1 and len(dif2) ==1:
-            #    return fix
-            for i in range(2):
-                rev_map[fix[:4]][inters2[i]] = pch[i]
-            #rev_map[fix[:4]][inters2]=list(pch[0])[0]
-            #rev_map[fix[:4]][inters[inters.index('-')+1]]=list(pch[1])[0]
-    return rev_map
-
-def wrFE(rm):
-    #rev_map[fix[:4]][inters[inters.index('-')-1]]=list(pch[0])[0]
-    tw= ''
-    for pdb, maps in rm.items():
-        
-        for A,B in maps.items():
-            tw+='\t'.join((pdb,A,B))+'\n'
-    return tw
-
-def getBadIDs(dx=None,raw_table=None):
-    if raw_table is None:
-        raw_table  = pandas.read_csv('Periodic_heteromers3.csv',index_col=False)
-    if not dx:
-        ps = list(raw_table['PDB_id'])
-        lx= [] 
-        for line in open('/scratch/asl47/PDB/FASTA/cleaned2_all_fasta.txt','r'):
-            if '>' in line and line.rstrip()[1:5].lower() in ps:
-                lx.append(line.rstrip()[1:])
-
-        dx = defaultdict(list)
-        for ix in lx:
-            dx[ix[:4].lower()].append(ix[-1])
-        return dx
-    
-    bad_s=[]
-
-    #raw_table  = pandas.read_csv('Periodic_heteromers3.csv',index_col=False)
-    for _,row in raw_table.iterrows():
-        #row['interfaces'] = eval(row['interfaces'].values[0])
-        #row['interfaces'] = {i for i in row['interfaces'][2:-2].split('\', \'')}
-        interfaces = {chain for interaction in row['interfaces'] for chain in interaction.split('-')}
-        for inx in interfaces:
-            if inx not in dx[row['PDB_id']]:
-                bad_s.append('{}_{}'.format(row['PDB_id'],inx))
-    return bad_s
-
-def nextWave(bads):
-    super_bad = []
-    for bad in bads:
-        if not fullFASTA('/scratch/asl47/PDB/FASTA/{}.fasta.txt'.format(bad.upper())):
-            pullFASTA(*bad.split('_'))
-            if not fullFASTA('/scratch/asl47/PDB/FASTA/{}.fasta.txt'.format(bad.upper())):
-                super_bad.append(bad)
-    return super_bad
-
-def swapT(df,df2):
-    rows = []
-    for _,row in df.iterrows():
-        row2 = df2.loc[df2['PDB_id']==row['PDB_id']]
-        if row2 is not None:
-            try:
-                rows.append({'PDB_id':row['PDB_id'], 'interfaces':row['interfaces'],'domains':row['domains'],'BSAs':row2['BSAs'].values[0]})
-            except:
-                print(row2['BSAs'])
-        else:
-            print(row)
-    return rows
-
-
-if __name__ == "__main__":
-    for c in ('Heteromers','Homomers'):
-        df = loadCSV(f'{c}_unfiltered.csv')
-        for i in (50,70,90):
-            f = filterDataset(df,i)
-            f.to_csv(f'{c}_{i}.csv',index=False,columns=['PDB_id','interfaces','domains','BSAs'])
-
-            
+def checkValidFASTA(file_name):
+    return os.path.exists(file_name) and os.path.getsize(file_name)   

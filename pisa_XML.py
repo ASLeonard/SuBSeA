@@ -155,6 +155,10 @@ def main(args):
     global INT_PATH
     INT_PATH = args.INT_path
 
+    if not (os.path.isdir(f'{BASE_PATH}{XML_PATH}') and os.path.isdir(f'{BASE_PATH}{INT_PATH}')):
+        print('Data folders are not configured correctly.\nPlease ensure XML and INT folders exist and rerun')
+        return        
+
     if args.file_format: ##default text file
         pullXML(args.file_name)
     else:
@@ -173,7 +177,7 @@ if __name__ == "__main__":
     parser.add_argument('-X','--XML_path', type=str,dest='XML_path')
     parser.add_argument('-I','--INT_path', type=str,dest='INT_path')
 
-    parser.set_defaults(file_format=True,file_name='data',file_path='../data/',XML_path='XML/',INT_path='INT/')
+    parser.set_defaults(file_format=True,file_name='data',file_path='data/',XML_path='XML/',INT_path='INT/')
 
     args = parser.parse_args()
     

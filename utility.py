@@ -1,15 +1,34 @@
 from SubSeA import pullFASTA
 from domains import pullDomains
+
+import os
 import json
+import gzip
+import shutil
+import urllib.request
+
 
 VALID_THRESHOLDS = {30,40,50,60,70,80,90,95,100}
 
 ##download file and then clean overall method
+#
+def downloadAllFASTA_GZ(fpath=''):
+    print('Downloading compressed all seqres from PDB')
+    urllib.request.urlretrieve('ftp://ftp.wwpdb.org/pub/pdb/derived_data/pdb_seqres.txt.gz', f'{fpath}all_fasta.txt.gz')
+    
+    print('Download successful, unzipping compressed archive now')
+    with gzip.open(f'{fpath}all_fasta.txt.gz', 'rb') as f_in, open(f'{fpath}all_fasta.txt', 'wb') as f_out:
+        shutil.copyfileobj(f_in, f_out)
+        
+    print('Cleaning up .txt.gz archive, now stripping out excess information')
+    os.remove(f'{fpath}all_fasta.txt.gz')
+    formatBulkFASTA(fpath,'all_fasta.txt')
+    print(f'All FASTA sequences formatted into "{fpath}minimal_all_fasta.txt"')
+    
 
-def formatBulkFASTA(fname,out_name=None):
+def formatBulkFASTA(fpath,fname,out_name=None):
     if not out_name:
-        last_index = fname.rfind('/')
-        out_name = f'{fname[:last_index]}/minimal_{fname[last_index+1:]}'
+        out_name = f'{fpath}minimal_{fname}'
 
     with open(fname,'r') as fasta_in, open(out_name,'w') as fasta_out:
         pdb, sequence = None, ''
@@ -55,6 +74,10 @@ def loadCSV(fname):
 
 def writeCSV(df,fname):
     df.to_csv(fname,index=False,columns=['PDB_id','interfaces','domains','BSAs'])
+
+def scrapePDBCodes(df):
+    with open('periodic_pdb_codes.txt', 'w') as file_out:
+        file_out.write(', '.join(df['PDB ID']))
     
 from domains import readDomains, invertDomains
 
@@ -71,17 +94,21 @@ def invertCSVDomains(df, partials=False, homomeric=False):
 import pandas
 from statistics import mean
 
-def makeDatasets(heteromeric=True, threshold=100):
-    data = mergeSheets(heteromeric,1,1,0)
+def makeDatasets(fpath='',heteromeric=True, threshold=100):
+    if not os.path.exists(f'{fpath}PeriodicTable.xlsx'):
+        downloadPeriodicData(fpath)
+    data = mergeSheets(fpath,heteromeric,1,1,0)
     post_filter = filterDataset(data,threshold)
-    writeCSV(('Heteromeric' if heteromeric else 'Homomeric')+f'_{threshold}'})
+    writeCSV(post_filter,('Heteromeric' if heteromeric else 'Homomeric')+f'_complexes_{threshold}.csv')
+
+
 
 def downloadPeriodicData(fpath=''):
     print(f'Downloading periodic data from Science')
     urllib.request.urlretrieve('https://science.sciencemag.org/highwire/filestream/671215/field_highwire_adjunct_files/3/aaa2245-Ahnert-SM-table-S2.xlsx', f'{fpath}PeriodicTable.xlsx')
     print(f'Download successful')    
 
-def mergeSheets(heteromerics=True,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=True):
+def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=True):
 
     DEX_interface = 'T' if heteromerics else 'I'
 
@@ -91,7 +118,7 @@ def mergeSheets(heteromerics=True,use_identical_subunits=True,relabel=True,DEBUG
 
     assembly_SYM = 'Symmetry group (M - monomer; Dna - dihedral with heterologous interfaces; Dns - dihedral with only isologous interfaces; Ts - tetrahedral with isologous interfaces; Ta - tetrahedral with only heterologous interfaces; O* - 4 different octahedral topologies)'
     
-    data_heteromers = pandas.read_excel('~/Downloads/PeriodicTable.xlsx',sheet_name=[0,2])
+    data_heteromers = pandas.read_excel(f'{fpath}PeriodicTable.xlsx',sheet_name=[0,2])
 
     try:
         domain_dict=readDomains('periodic2')
@@ -160,9 +187,10 @@ def mergeSheets(heteromerics=True,use_identical_subunits=True,relabel=True,DEBUG
                 if DEBUG_ignore_domains:
                     domain_info = ''
                 else:
-                    domain_info = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
+                    domain_info_raw = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
+                    domain_info = {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in domain_info_raw.split(';') if len(dom)>1}
                 
-                new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info, 'BSAs': str({K:BSA_av[K] for K in meaningful_interfaces})})
+                new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info, 'BSAs': {K:BSA_av[K] for K in meaningful_interfaces}})
 
     if not DEBUG_ignore_domains:
         with open('domain_architectures_periodic2.json', 'w') as file_out:
@@ -174,7 +202,7 @@ def mergeSheets(heteromerics=True,use_identical_subunits=True,relabel=True,DEBUG
 def downloadClusters(threshold):
     assert threshold in VALID_THRESHOLDS, 'Invalid cluster threshold'
     print(f'Downloading PDB clustering @ {threshold}')
-    urllib.request.urlretrieve(f'ftp://resources.rcsb.org/sequence/clusters/bc-{threshold}.out', f'PDB_clusters_{threshold}')
+    urllib.request.urlretrieve(f'ftp://resources.rcsb.org/sequence/clusters/bc-{threshold}.out', f'PDB_clusters_{threshold}.txt')
     print(f'Download successful')
 
     

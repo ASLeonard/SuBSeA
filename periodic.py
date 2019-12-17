@@ -7,7 +7,7 @@ from utility import loadCSV, invertCSVDomains
 ##global imports
 import pandas
 from numpy.random import randint, choice
-from collections import defaultdict, Counter
+from collections import defaultdict
 import os
 import json
 import argparse
@@ -29,6 +29,30 @@ def heteromericInteractionRunner(df_het):
 
     return comparisons_to_make
 
+
+def shuffledInteractionDomains(df):
+
+    table_of_observations = [[0,0],[0,0]]
+    interaction_edges = []
+
+    for domains, interactions in zip(df['domains'],df['interfaces']):
+        for interaction in interactions:
+            local_domains = [domains[C] for C in interaction.split('-')]
+            table_of_observations[0][duplicateIntersection(*local_domains) != ()] += 1
+            interaction_edges.extend(local_domains)
+
+    interaction_edges = np.asarray(interaction_edges)
+    ##shuffle it
+    np.random.shuffle(interaction_edges)
+    interaction_edges = interaction_edges.reshape((2,-1))
+
+    overlap_results = np.apply_along_axis(lambda x: duplicateIntersection(*x)!=(),arr=interaction_edges,axis=0)
+    for form in (0,1):
+        table_of_observations[1][form] = len(overlap_results[overlap_results==form])
+    
+    
+
+    return table_of_observations, fisher_exact(table_of_observations)
 
 def scrapePDBs(df):
     with open('period_pdb_codes.txt', 'w') as file_out:
@@ -102,9 +126,6 @@ def domainSubunitRewire(df):
     #chi2_contingency(obs, lambda_="log-likelihood")
     return 'dead'
 
-def duplicateIntersection(domain_1, domain_2):
-    overlap = Counter(domain_1) & Counter(domain_2)
-    return tuple(dom for dom in sorted(overlap.elements()))
 
 def conv(dq):
     a=[]
@@ -487,29 +508,7 @@ def heteromericPathwayStats(df,df2):
             
 
         
-def shuffledInteractionDomains(df):
 
-    table_of_observations = [[0,0],[0,0]]
-    interaction_edges = []
-
-    for domains, interactions in zip(df['domains'],df['interfaces']):
-        for interaction in interactions:
-            local_domains = [domains[C] for C in interaction.split('-')]
-            table_of_observations[0][duplicateIntersection(*local_domains) != ()] += 1
-            interaction_edges.extend(local_domains)
-
-    interaction_edges = np.asarray(interaction_edges)
-    ##shuffle it
-    np.random.shuffle(interaction_edges)
-    interaction_edges = interaction_edges.reshape((2,-1))
-
-    overlap_results = np.apply_along_axis(lambda x: duplicateIntersection(*x)!=(),arr=interaction_edges,axis=0)
-    for form in (0,1):
-        table_of_observations[1][form] = len(overlap_results[overlap_results==form])
-    
-    
-
-    return table_of_observations, fisher_exact(table_of_observations)
 
 from scipy.stats import fisher_exact
 def randomProteinSampler(df_HET, df_HOM, domain_mode, N_SAMPLE_LIMIT,match_partials=False):

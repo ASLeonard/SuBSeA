@@ -51,7 +51,7 @@ def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
         ##see if fasta info is in given file
         try:
             with open(f'{BASE_PATH}{FASTA_PATH}{pdb}_{chain}.fasta.txt','w') as fasta_file:
-                subprocess.run(['grep', '-i','-A1',f'{pdb}_{chain}', f'{BASE_PATH}{FASTA_PATH}all_fasta.txt'],check=True,stdout=fasta_file)
+                subprocess.run(['grep', '-i','-A1',f'{pdb}_{chain}', f'{BASE_PATH}{FASTA_PATH}minimal_all_fasta.txt'],check=True,stdout=fasta_file)
                 
         except subprocess.CalledProcessError as e:
             ##could not find FASTA data in all_fasta file, try downloading

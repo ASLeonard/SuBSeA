@@ -53,6 +53,10 @@ def domainMatch(data,c1,c2):
      else:
           return 'none'
 
+def duplicateIntersection(domain_1, domain_2):
+    overlap = Counter(domain_1) & Counter(domain_2)
+    return tuple(dom for dom in sorted(overlap.elements()))
+
 ##invert domain data, into a dictionary with architecture key and pdb values
 def invertDomains(domains,partials=False):
     inverted = defaultdict(list)

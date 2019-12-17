@@ -9,9 +9,61 @@ from itertools import product
 
 from scipy.stats import linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp, brunnermunzel
 
-from periodic import loadCSV
+from utility import loadCSV
+from domains import readDomains, domainMatch, duplicateIntersection
 
-from domains import readDomains, domainMatch
+
+def groupHeteromericBSAs(threshold=100,filter_immunoglobulins=False):
+
+    def domainMatchFractional(domains,c1,c2):
+        return len(duplicateIntersection(domains[c1],domains[c2])) / max(len(domains[c1]),len(domains[c2]))
+
+    df = loadCSV(f'Heteromeric_complexes_{threshold}.csv')
+    #bsa_het = convertH(df_het,filter_immunoglobulins)
+
+    rows = []
+    for _,row in df.iterrows():
+        for interface in row['interfaces']:
+            rows.append({'id':f'{row["PDB_id"]}_{interface.replace("-","_")}','shared':domainMatchFractional(row['domains'],*interface.split('-')),'BSA':row['BSAs'][interface]})
+            if filter_immunoglobulins and rows[-1]['shared']>=0 and ('2.60.40.10') in row['domains'][interface[0]]:
+                del rows[-1]
+
+    bsa_df = pd.DataFrame(rows)
+    
+    bsa_df ['ancestry'] = ['homologous' if x>0 else 'analogous' for x in bsa_df['shared']]
+    
+    bsa_df['filter'] = threshold
+    return bsa_df    
+
+## plots violinplot for heteromeric BSA data give by "groupHeteromericBSAs" function.
+## stat_func can take on most scipy.stats 2 dataset tests
+def plotGroupedHeteromericBSAs(data,stat_func=brunnermunzel):
+    ## make the figure
+    plt.figure()
+    data = data[(data.ancestry=='homologous') | (data.ancestry=='analogous')]
+    ax = sns.violinplot(x="ancestry", y="BSA", hue='ancestry',data=data, palette="muted",scale_hue=False,inner="quartile",cut=0,bw=.3,split='True')
+    plt.yscale('log')
+    plt.show(block=False)
+
+    ## crunch the stats
+    analogous = data.loc[data['ancestry']=='analogous']
+    homologous = data.loc[data['ancestry']=='homologous']
+    
+    for val, data in zip(('Homologous','Analogous'),(homologous,analogous)):
+        print(f'{val} median = {np.nanmedian(data["BSA"]):.0f} ({len(data)} points)')
+
+    stat_args = defaultdict(dict,{brunnermunzel:{"alternative":"greater","distribution":"normal"}})
+    
+    print(f'\np-value: {stat_func(homologous["BSA"],analogous["BSA"],**stat_args[stat_func])[1]:.3e}')
+    print(f'CLES: {commonLanguageES(analogous["BSA"],homologous["BSA"]):.3f}')
+      
+
+##find fraction of pairs where the higher element is actually higher than the lower element
+def commonLanguageES(lows, highs):
+    assert len(lows) and len(highs), 'invalid arguments'
+    return sum(h>l for l,h in product(lows,highs))/(len(lows)*len(highs))
+
+
 
 def makeCSV(df,domain):
     
@@ -24,185 +76,6 @@ def makeCSV(df,domain):
         new_rows.append({'PDB_id':row['id'][:4], 'interfaces':'-'.join(sorted(row['chains'])), 'domains':domain_info, 'BSAs':round(row['BSA']) if not pd.isna(row['BSA']) else ''})
 
     return pd.DataFrame(new_rows)
-
-def writeCSV(df,fname):
-    df.to_csv(fname,index=False,columns=['PDB_id','interfaces','domains','BSAs'])
-
-def scrubInput(run_name,local_alignment=True,similarity=True,domain='SCOP'):
-
-    rows_list = []
-
-    domain_dict=readDomains(domain)
-    #homomer_domains=getUniqueHomodimerDomains(100)
-    
-          
-    for result in glob.glob('/scratch/asl47/PDB/results/{}/*.results'.format(run_name)):
-        d={'id':result.split('.')[0].split('/')[-1].lower()}
-        raw=[line.rstrip() for line in open(result)]
-          
-        try:
-            d['homomer']=bool(raw[0]=='1')
-            
-            if len(raw)==1:
-                #print("Empty ID on {}".format(d['id']))
-                continue
-            d['chains'] = tuple(sorted(raw[1].split()))
-            
-            if any('#' in line for line in raw):
-                homologies=tuple(filter(lambda element: '#' in element,raw))
-                d['homology']=float(homologies[2*local_alignment+similarity].split()[-1][:-1]) 
-                d['H_pred']='yes' if d['homology']>=30 else 'no'
-                
-            if any('Total' in line for line in raw):
-                bsa=tuple(filter(lambda element: 'Total' in element,raw))
-                d['BSA']=((float(bsa[2].split()[-1])+float(bsa[1].split()[-1]))-float(bsa[0].split()[-1]))/2
-                   
-            if d['id'][:4] in domain_dict:
-                d['domain']=domainMatch(domain_dict[d['id'][:4]],*d['chains'])
-                if d['domain']=='full':
-                    d['arch']=domain_dict[d['id'][:4]][d['chains'][0]]
-                else:
-                    d['arch']=None
-
-                   
-                        
-                        
-            else:
-                d['domain']='unknown'
-            if any('TM-score' in line for line in raw):
-                aligns=tuple(filter(lambda element: 'TM-score' in element,raw))
-                d['TM']=float(aligns[0].split()[1])
-                d['S_pred']= 'no' if d['TM']<=.2 else 'yes' if d['TM']>=.5 else 'maybe'
-                   
-        except Exception as e:
-            print("Exception",e)
-            print("except on ", d['id'], "len ",len(raw))
-            continue
-        rows_list.append(d)
-    return pd.DataFrame(rows_list)
-
-def getBSAs(thresh='unfiltered',filter_immuno=False):
-    df_het = loadCSV(f'Heteromers_{thresh}.csv')
-    bsa_het = convertH(df_het,filter_immuno)
-    bsa_het['shared2']= ['full' if x>0 else ('partial' if x>0 else 'none') for x in bsa_het['shared']] 
-    
-    df_hom = loadCSV(f'Homomers_{thresh}.csv')
-    bsa_hom= convertH(df_hom,filter_immuno)
-    #bsa_hom = pd.DataFrame(bsa.loc[bsa.shared=='full'])
-    #bsa_hom.shared = 'hom'
-    bsa_hom['shared2']= ['hom' if x>=0 else 'ignore' for x in bsa_hom['shared']]
-
-    df = pd.concat([bsa_het,bsa_hom],ignore_index=True)
-    df['filter']=thresh
-    return df
-
-from periodic import duplicateIntersection
-def domainMatchF(domains,c1,c2):
-    #print(set(domains[c1]) & set(domains[c2]))
-    return len(duplicateIntersection(domains[c1],domains[c2])) / max(len(domains[c1]),len(domains[c2]))
-    
-def convertH(df,filter_immuno=False):
-    rows = []
-    for _,row in df.iterrows():
-        for interface in row['interfaces']:
-            rows.append({'id':f'{row["PDB_id"]}_{interface.replace("-","_")}','shared':domainMatchF(row['domains'],*interface.split('-')),'BSA':row['BSAs'][interface]})
-            if filter_immuno and rows[-1]['shared']>=0 and ('2.60.40.10') in row['domains'][interface[0]]:
-                del rows[-1]#print(row.PDB_id)
-
-
-    df_h = pd.DataFrame(rows)
-    #df_h=df_h.replace('partial','full')
-    #df_h=df_h.replace('NA','none')
-    
-    return df_h 
-
-def plotDataX(data,stat_func=brunnermunzel):
-    #g=sns.regplot(x="TM", y="BSA", data=data)                  
-    #g = sns.violinplot(y="BSA",data=low)#xlim=(0,1))
-    #plt.figure()
-    #g3 = sns.violinplot(y="BSA",data=high)#xlim=(0,1))
-    #g2 = sns.jointplot(x="TM", y="BSA",data=data,xlim=(0,1))
-    #sns.relplot(x='TM', y='BSA', size="BSA",sizes=(40, 400),hue='domain', alpha=.75, height=6, data=data)
-    plt.figure()
-    data = data[(data.shared2=='full') | (data.shared2=='none')]
-    ax = sns.violinplot(x="shared2", y="BSA", hue='shared2',data=data, palette="muted",scale_hue=False,inner="quartile",cut=0,bw=.3,split='True')
-
-    plt.yscale('log')
-    plt.show(block=False)
-    
-    low = data.loc[(data['shared2']=='none')]# | (data['shared']=='NA')]
-    high = data.loc[(data['shared2']=='full') | (data['shared']=='partial')]
-    homodimer_ref = data.loc[(data['shared2']=='hom')]
-    for val, dic in zip(('High','Low','Ref'),(high,low,homodimer_ref)):
-        print("{}: ({})".format(val,len(dic))," = ", np.nanmedian(dic['BSA']))
-
-         
-    print("\np-value: {}\n".format(stat_func(high['BSA'],low['BSA'],alternative='greater',distribution='normal')[1]))
-    print("\np-value: {}\n".format(stat_func(homodimer_ref['BSA'],low['BSA'],distribution='normal')[1]))
-    print("\np-value: {}\n".format(stat_func(homodimer_ref['BSA'],high['BSA'],distribution='normal')[1]))
-    #return
-    
-    #for overlap in ('full','partial','none'): #'NA'
-    #     print(overlap,"({})".format(len(data.loc[data['shared']==overlap])),np.nanmedian([float(i) for i in data.loc[data['shared']==overlap]['BSA']]))
-    
-    #domain_yes=data.loc[(data['shared']=='full') | (data['shared']=='partial')]
-    #domain_no=data.loc[data['shared']=='none']
-    #data.loc[~(data['domain']=='full') & ~(data['domain']=='partial')]
-    #print("\np-value: {}".format(mannwhitneyu(domain_yes['BSA'],domain_no['BSA'],alternative='greater')[1]))
-    
-    print('\n CLES: ',commonLanguageES(low['BSA'],high['BSA']))
-    #print('\n CLES: ',commonLanguageES(high['BSA'],homodimer_ref['BSA']))
-    #print('\n CLES: ',commonLanguageES(low['BSA'],homodimer_ref['BSA']))
-
-    #print(np.nanmedian(domain_yes['BSA']),np.nanmedian(domain_no['BSA']))
-
-
-def plotHeteromerBSA(df):
-
-    domain_yes=df.loc[(df['shared']=='full') | (df['shared']=='partial')]
-    domain_no=df.loc[(df['shared']=='none') | (df['shared']=='NA')]
-
-    f, ax = plt.subplots()
-    
-    for overlap in ('full','partial','none','NA','hom'):
-        sns.kdeplot(ax=ax,data=df.loc[df['shared']==overlap]['BSA'],label=overlap)
-
-    f, ax = plt.subplots()
-    
-    for dd in (domain_yes,domain_no):
-        sns.kdeplot(ax=ax,data=dd['BSA'])
-
-    plt.show(0)
-        
-    
-
-##find fraction of pairs where the higher element is actually higher than the lower element
-def commonLanguageES(lows, highs):
-    assert len(lows) and len(highs), 'invalid arguments'
-
-    return sum(h>l for l,h in product(lows,highs))/(len(lows)*len(highs))
-
-
-def loadLevy():
-    data=[]
-    for line in open('../../../../Downloads/levydata'):
-         vs=line.split()
-         data.append((vs[0],float(vs[3]),*[int(i) for i in vs[6:9]]))
-    return data
-
-def plotLevy(df,plo='BSA'):
-    plt.figure()
-    if plo == 'BSA':
-        plt.hist(df['BSA'],bins=100)   
-        plt.show(block=False)
-    elif plo == 'Hom':
-        ax = sns.violinplot(x="homol", y="BSA", data=df.loc[df['iden']==0], palette="Set2",  scale="count",inner="quartile",bw=.1)
-        plt.show(block=False)
-    data=df.loc[df['iden']==0]
-    #return data
-    print(np.median(data.loc[data['homol']==1]['BSA']),np.median(data.loc[data['homol']==0]['BSA']))
-    print(stats.mannwhitneyu(data.loc[data['homol']==1]['BSA'],data.loc[data['homol']==0]['BSA'],alternative='greater'))
-       
                    
      
 def correspondingHomodimers(heteromerics, homomerics):
@@ -464,35 +337,41 @@ def hexIT(df,X_C='pval_S',Y_C='norm_OVR',sim_thresh=95,sigma=-1*np.log10(.05)):
     #plt.plot([0,20],[0,-20],'k--',lw=3)
     #g.map(sns.residplot,data=df,x='pval_S2',y='norm_OVR',robust=True)
 
+def plotHeteromericConfidenceDecay(df,x_var = 'pval_S',sigma=-1,sim_thresh=90):
+
+    df = df.loc[df['similarity'] <= sim_thresh]
+    var = np.var(df[x_var])
+    print(f'Variance in x_var is {var}')
+    val_cut = sigma if isinstance(sigma,float) else sigma*var    
+    df = df[df[x_var]>val_cut]
+    
+    
     plt.figure()
     cdc= {'MUT':('H','darkorange'),'MPA':('P','forestgreen'),'DNO':('p','royalblue')}
-    df.loc[df.code=='MPA',1]='MUT'
+    df.loc[df.code=='MPA',1] = 'MUT'
     P_STARS = np.linspace(0,15,101)
+    
     for ind,code in enumerate(('MUT','MPA','DNO')):
-        df_c = df[df.code==code].pval_S
+        df_c = df[df.code==code][x_var]
         if len(df_c)==0:
             continue
-        print(code,len(df_c))
-        cdf = []
+        print(f'Heteromeric grouping: {code}, {len(df_c)} entries.')
         
-        for p_star in P_STARS :
-            cdf.append(np.sum(df_c>=p_star))
-
-        cdf = np.log10(np.array(cdf)/max(cdf))
-        print(cdf[:2])
+        cdf = np.array([np.sum(df_c>=p_star) for p_star in P_STARS])
+        cdf = np.log10(cdf/cdf.max())
+                
+        #cut off data to prevent outliers dominating
         cdf = cdf[cdf>=np.log10(.01)]
+        #similarly trim data so fit is only in statistically strong region
         cdf_sl = cdf[cdf>=np.log10(.01)]
-        plt.plot(P_STARS[:len(cdf)],cdf,c=cdc[code][1],marker=cdc[code][0],ms=20,mfc='None',mew=3,lw=3,ls='--',markevery=[-1])#,markevery=(ind/20,.15)
+        
+        plt.plot(P_STARS[:len(cdf)],cdf,c=cdc[code][1],marker=cdc[code][0],ms=20,mfc='None',mew=3,lw=3,ls='--',markevery=[-1])
 
         slope, iner, *var = linregress(P_STARS[0:len(cdf_sl)],cdf_sl[0:])
-
-        print(slope)
-        print(var)
         plt.plot(P_STARS[0:len(cdf)],slope*P_STARS[0:len(cdf)]+iner,':')
-        #param, ptop = scipy.optimize.curve_fit(lambda t,a: np.exp(a*t),  P_STARS,  cdf)
+        
+        print(f'Power law fit: {slope:.3f}, initial drop is {cdf[1]*100:.1f}%')
 
-        #plt.plot(P_STARS,np.exp(param[0]*P_STARS),ls='--',c=cdc[code])
-    #plt.yscale('log')
     plt.show(0)
 
 def plotGap(df,sigma=3,X_C='similarity',Y_C='gapX',H_C='norm_OVR'):

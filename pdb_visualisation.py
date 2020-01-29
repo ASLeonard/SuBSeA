@@ -1,18 +1,17 @@
 import matplotlib.pyplot as plt
 
-import glob
 import pandas as pd
 import json
 from collections import defaultdict
 import numpy as np
 from itertools import product
 
-from scipy.stats import expon, linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp, brunnermunzel, pearsonr, spearmanr,kendalltau,theilslopes
+from scipy.stats import expon,linregress,ks_2samp,anderson_ksamp,mannwhitneyu,epps_singleton_2samp,brunnermunzel,pearsonr,spearmanr,kendalltau,theilslopes
 
 from utility import loadCSV
-from domains import readDomains, domainMatch, duplicateIntersection
+from domains import readDomains, duplicateIntersection
 
-from matplotlib.colors import LogNorm, Normalize
+from matplotlib.colors import Normalize
  
 
 
@@ -27,7 +26,8 @@ def groupHeteromericBSAs(threshold=100,filter_immunoglobulins=False):
     rows = []
     for _,row in df.iterrows():
         for interface in row['interfaces']:
-            rows.append({'id':f'{row["PDB_id"]}_{interface.replace("-","_")}','shared':domainMatchFractional(row['domains'],*interface.split('-')),'BSA':row['BSAs'][interface]})
+            rows.append({'id':f'{row["PDB_id"]}_{interface.replace("-","_")}', 'shared':domainMatchFractional(row['domains'],*interface.split('-')),
+    'BSA':row['BSAs'][interface]})
             if filter_immunoglobulins and rows[-1]['shared']>=0 and ('2.60.40.10') in row['domains'][interface[0]]:
                 del rows[-1]
 
@@ -36,7 +36,7 @@ def groupHeteromericBSAs(threshold=100,filter_immunoglobulins=False):
     bsa_df ['ancestry'] = ['homologous' if x>0 else 'analogous' for x in bsa_df['shared']]
     
     bsa_df['filter'] = threshold
-    return bsa_df    
+    return bsa_df
 
 ## plots violinplot for heteromeric BSA data give by "groupHeteromericBSAs" function.
 ## stat_func can take on most scipy.stats 2 dataset tests
@@ -44,7 +44,7 @@ def plotGroupedHeteromericBSAs(data,stat_func=brunnermunzel):
     ## make the figure
     plt.figure()
     data = data[(data.ancestry=='homologous') | (data.ancestry=='analogous')]
-    ax = sns.violinplot(x="ancestry", y="BSA", hue='ancestry',data=data, palette="muted",scale_hue=False,inner="quartile",cut=0,bw=.3,split='True')
+    sns.violinplot(x="ancestry", y="BSA", hue='ancestry',data=data, palette="muted",scale_hue=False,inner="quartile",cut=0,bw=.3,split='True')
     plt.yscale('log')
     plt.show(block=False)
 
@@ -67,19 +67,19 @@ def commonLanguageES(lows, highs):
     return sum(h>l for l,h in product(lows,highs))/(len(lows)*len(highs))
 
 
-
 def makeCSV(df,domain):
     
     domain_dict=readDomains(domain)
     new_rows = []
 
     for _, row in df.iterrows():
-        domain_info = ';'.join([chain+':{}'.format(tuple(domain_dict[row['id'][:4]][chain])) if chain in domain_dict[row['id'][:4]] else '' for chain in row['chains']] )
+        domain_info = ';'.join([chain+':{}'.format(tuple(domain_dict[row['id'][:4]][chain])) if chain in domain_dict[row['id'][:4]] else '' 
+            for chain in row['chains']] )
         
-        new_rows.append({'PDB_id':row['id'][:4], 'interfaces':'-'.join(sorted(row['chains'])), 'domains':domain_info, 'BSAs':round(row['BSA']) if not pd.isna(row['BSA']) else ''})
+        new_rows.append({'PDB_id':row['id'][:4], 'interfaces':'-'.join(sorted(row['chains'])),
+            'domains':domain_info, 'BSAs':round(row['BSA']) if not pd.isna(row['BSA']) else ''})
 
     return pd.DataFrame(new_rows)
-                   
      
 def correspondingHomodimers(heteromerics, homomerics):
     domain_groupings={}
@@ -107,7 +107,7 @@ def loadND(file_ID):
 def loadDF(file_ID,json_save = False,csv_save=False):
     if csv_save:
         return pd.read_csv(f'{file_ID}_comparison.csv')
-    raw_data = (loadDict if json_save else loadND)(file_ID) 
+    raw_data = (loadDict if json_save else loadND)(file_ID)
     rows = []
     for results in (raw_data.values() if json_save else raw_data):
         if results == 'error':
@@ -155,7 +155,7 @@ def loadALL(sample=None,rscratch=True):
 
 def getFrac(data,key):
     vals = list(data.values())
-    print('{:.3f}'.format(vals.count(key)/len(vals))) 
+    print('{:.3f}'.format(vals.count(key)/len(vals)))
 
 def plotData(datas,ax=None,stat_func=ks_2samp,merge_nones=True):
     #if isinstance(datas,list) and not isinstance(datas[0],str):
@@ -169,10 +169,10 @@ def plotData(datas,ax=None,stat_func=ks_2samp,merge_nones=True):
     #    cleaned_datas = [np.log10(list(filter(lambda x: isinstance(x[0],float),data.values()))) for data in datas]
     #
     cleaned_datas= datas
-    main_range=(-25,0)   
+    main_range=(-25,0)
     
     if not ax:
-        f,ax = plt.subplots()
+        _,ax = plt.subplots()
 
     def logSlope(counts,bins):
         slope_ROI=slice(round(.5*len(counts)),round(.85*(len(counts))))
@@ -233,7 +233,7 @@ def plotSNS2(df,X_C='pval_F',Y_C='similarity',code=None):
 def plotCats(df,ax=None,ls='-',cmap='green',pval_type=''):
     N=6
     if ax is None:
-        f, ax =plt.subplots(3,2)
+        _, ax =plt.subplots(3,2)
     ax= ax.flatten()
     #cmap = plt.get_cmap(cmap)
     for i in range(0,N):
@@ -243,7 +243,9 @@ def plotCats(df,ax=None,ls='-',cmap='green',pval_type=''):
 
         color = cmap#cmap(i/(2*N))
         
-        sns.distplot(a=np.clip(df.loc[df['sg']==i][f'pval{pval_type}'],-10,0),bins=np.linspace(-10,0,101),ax=ax[i],norm_hist=True,color=color,label=i,kde=False,kde_kws={'cut':0,'kernel':'epa','ls':ls},hist_kws={'histtype':'step','alpha':1,'lw':2})#kde_kws={'ls':ls,'alpha':1})
+        sns.distplot(a=np.clip(df.loc[df['sg']==i][f'pval{pval_type}'],-10,0),bins=np.linspace(-10,0,101),
+            ax=ax[i],norm_hist=True,color=color,label=i,kde=False,
+            kde_kws={'cut':0,'kernel':'epa','ls':ls},hist_kws={'histtype':'step','alpha':1,'lw':2})#kde_kws={'ls':ls,'alpha':1})
         CfD(df.loc[df['sg']==i][f'pval{pval_type}'],ax[i],color,'--')
         
         #fit_p = pareto.fit(-1*np.array(df.loc[df['sg']==i]['pval']))
@@ -285,25 +287,6 @@ def plotGrid(df):
     plt.show(0)
 
 
-def explore(df,filter_fails=True):
-    
-    list_of_cmaps=['Blues_r','Purples_r','Greens_r','Reds_r']
-    if filter_fails:
-        df = df.loc[df['hits']>0]
-        df = df.loc[df['similarity']<1000]
-        
-    df['glow'] = df['overlap']/df['align_length']
-    df['sco'] = df['score']/df['align_length']
-    df['similarity'] = df['similarity']/100
-    g = sns.PairGrid(df,hue_order=['M','MP','R','RP'],hue_kws={"cmap":list_of_cmaps},hue='match',vars=['sco','glow','similarity','pval_F'])#'pval_F','pval_T','pval_S'])#['score','glow','pval_F','pval_S','pval_T','gaps'])
-    g.map_upper(plt.scatter,alpha=0.5,s=6)
-    #g.map_diag(sns.kdeplot, lw=2,alpha=0.8)
-    #g.map_lower(plt.hexbin)
-    #g.map_lower(sns.kdeplot,n_levels=10,gridsize=100,bw=.05)
-    g.add_legend()
-    
-    plt.show(0)
-
 
 def hexbin(x, y, color, **kwargs):
     cmap = plt.get_cmap('cividis')
@@ -316,36 +299,12 @@ def hexbin(x, y, color, **kwargs):
 
 
 
-def hexIT(df,X_C='pval_S',Y_C='norm_OVR',sim_thresh=95,sigma=-1*np.log10(.05)):
-    extent_codes = {'pval_F':(0,20),'pval_F2':(0,20),'pval_S':(0,20),'pval_S2':(0,20),'pval_T':(0,20),'pval_T2':(0,20),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3),'split':(0,3)}
-
-    df = df.loc[df['similarity'] <= sim_thresh]
-
-    var = np.var(df[X_C])#[df[X_C]>0][X_C])
-    print(var)
-
-    val_cut = sigma if isinstance(sigma,float) else sigma*var
-    df = df[df[X_C]>val_cut]
-    
-    df_scaled = df.loc[(df['norm_OVR'] > -.01) & (df[X_C]>sigma*var)]
-    #df.pval_S2 = df.pval_S2*-1
-    #print(len(df_scaled))
-    
-    #fig=plt.figure()
-
-  
-    
-    ax=sns.lmplot(x=X_C, y=Y_C, hue="code",hue_order=['DNO','MPA','MUT'], data=df, markers=["o", "P",'d'], palette={'MUT':'darkorange','DNO':'royalblue','MPA':'forestgreen'},scatter_kws={'alpha':.75,'s':150,'facecolor':'None','lw':3},robust=False,truncate=True)
-    plt.plot([-np.log10(.05)]*2,[-1,2])
-    #plt.plot([0,20],[0,-20],'k--',lw=3)
-    #g.map(sns.residplot,data=df,x='pval_S2',y='norm_OVR',robust=True)
-
 def plotHeteromericConfidenceDecay(df,x_var = 'pval_S',sigma=-1,sim_thresh=90):
 
     df = df.loc[df['similarity'] <= sim_thresh]
     var = np.var(df[x_var])
     print(f'Variance in x_var is {var}')
-    val_cut = sigma if isinstance(sigma,float) else sigma*var    
+    val_cut = sigma if isinstance(sigma,float) else sigma*var
     df = df[df[x_var]>val_cut]
     
     
@@ -354,7 +313,7 @@ def plotHeteromericConfidenceDecay(df,x_var = 'pval_S',sigma=-1,sim_thresh=90):
     df.loc[df.code=='MPA',1] = 'MUT'
     P_STARS = np.linspace(0,15,101)
     
-    for ind,code in enumerate(('MUT','MPA','DNO')):
+    for code in ('MUT','MPA','DNO'):
         df_c = df[df.code==code][x_var]
         if len(df_c)==0:
             continue
@@ -397,7 +356,7 @@ def plotGap(df,sigma=3,X_C='similarity',Y_C='gapX',H_C='norm_OVR'):
         kwargs.pop('color')
         plt.scatter(x,y,c=c,norm=Normalize(0,15),cmap='plasma',alpha=0.6,**kwargs)
         #plt.plot([0,100],[0,1],'k--')
-        
+
     g.map(fcc, X_C,Y_C,H_C)
     #g.map(sns.kdeplot,'pval_S2','norm_OVR')
     plt.show(0)

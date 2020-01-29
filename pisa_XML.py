@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import sys
 import os
 
 from collections import defaultdict
@@ -180,5 +179,5 @@ if __name__ == "__main__":
     parser.set_defaults(file_format=True,file_name='data',file_path='data/',XML_path='XML/',INT_path='INT/')
 
     args = parser.parse_args()
-    
+
     main(args)

@@ -1,5 +1,4 @@
 import pisa_XML, domains, SubSeA, utility, pdb_visualisation
-import pytest
 import os
 
 def test_invert_domains(capsys):
@@ -29,7 +28,7 @@ def test_SuBSeA(capsys):
     for pdb, chains in (('1A00',('C','D')),('1BND',('A','B'))):
         for chain in chains:
             SubSeA.pullFASTA(pdb,chain)
-    
+
     with capsys.disabled():
         print('Setting EMBOSS_ACDROOT variable to current directory')
         os.environ['EMBOSS_ACDROOT'] = os.getcwd()

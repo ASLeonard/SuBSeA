@@ -13,8 +13,6 @@ import pandas
 from statistics import mean
 from domains import readDomains, invertDomains
 
-
-
 VALID_THRESHOLDS = {30,40,50,60,70,80,90,95,100}
 
 ##download file and then clean overall method
@@ -113,6 +111,47 @@ def makeDatasets(fpath='',heteromeric=True, threshold=100,use_identical_subunits
     post_filter = filterDataset(data,threshold)
     writeCSV(post_filter,('Heteromeric' if heteromeric else 'Homomeric')+f'_complexes_{threshold}.csv')
 
+def loadAssistiveFiles(relabel):
+    try:
+        domain_dict=readDomains('periodic')
+    except FileNotFoundError:
+        print('given domain file doesn\'t exist, will start new one')
+        domain_dict={}
+
+    try:
+        chain_map = chainMap() if relabel else {}
+        chain_mapE = chainMap('Extra') if relabel else {}
+        chain_map_full = {**chain_map,**chain_mapE}
+    except FileNotFoundError:
+        print('Chain relabelling doesn\'t exist, using blank')
+        chain_map_full = {}
+
+    return domain_dict, chain_map_full
+
+def accumulateBSAs(interfaces,BSAs_raw):
+    if not isinstance(BSAs_raw,str):
+        BSAs_raw = str(BSAs_raw)
+
+    BSAs = defaultdict(list)
+    for K,V in zip(('-'.join(sorted(interface.split('-'))) for interface in interfaces.split(',')),BSAs_raw.split(',')):
+        BSAs[K].append(float(V))
+
+    return {K:round(mean(V)) for K,V in BSAs.items()}
+
+def makeFormattedDomainInformation(meaningful_interfaces,domain_slice):
+    original_length = len(meaningful_interfaces)
+    
+    for index,interface in enumerate(meaningful_interfaces[:]):
+        if not all(chain in domain_slice for chain in interface.split('-')):
+            del meaningful_interfaces[index + len(meaningful_interfaces) - original_length]
+    if not meaningful_interfaces:
+        return False
+
+    domain_info_raw = ';'.join([chain+':{}'.format(tuple(domain_slice[chain])) if chain in domain_slice 
+        else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
+    return {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in domain_info_raw.split(';') if len(dom)>1}
+
+                
 def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=True):
 
     DEX_interface = 'T' if heteromerics else 'I'
@@ -127,20 +166,8 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
     
     data_heteromers = pandas.read_excel(f'{fpath}PeriodicTable.xlsx',sheet_name=[0,2])
 
-    try:
-        domain_dict=readDomains('periodic')
-    except FileNotFoundError:
-        print('given domain file doesn\'t exist, will start new one')
-        domain_dict={}
-
-    try:
-        chain_map = chainMap() if relabel else {}
-        chain_mapE = chainMap('Extra') if relabel else {}
-        chain_map_full = {**chain_map,**chain_mapE}
-    except FileNotFoundError:
-        print('Chain relabelling doesn\'t exist, using blank')
-        chain_map_full = {}
-        
+    domain_dict, chain_map_full = loadAssistiveFiles(relabel)
+    
     new_rows = []
 
 
@@ -152,8 +179,7 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
 
             if assembly_SYM in row and row[assembly_SYM] == 'M':
                 continue
-            
-            
+
             if not pandas.isna(row[interface_KEY]) and any(type_ in row[interface_KEY] for type_ in ('T','I')):
 
                 if not all(c.isupper() for pair in row[interface_KEY].split(',') for c in pair.split('-')):
@@ -175,32 +201,15 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
                 if not meaningful_interfaces:
                     continue
 
-                BSAs = defaultdict(list)
-                if not isinstance(row[interface_BSA],str):
-                    row[interface_BSA] = str(row[interface_BSA])
-                for K,V in zip(('-'.join(sorted(interface.split('-'))) for interface in row[interface_LIST].split(',')),row[interface_BSA].split(',')):
-                    BSAs[K].append(float(V))
-
-                BSA_av = {K:round(mean(V)) for K,V in BSAs.items()}
+                BSA_av = accumulateBSAs(row[interface_LIST],row[interface_BSA])
 
                 if PDB_code not in domain_dict:
                     print('pulling for ',PDB_code)
                     domain_dict[PDB_code] = pullDomains(PDB_code)
                 
-
-                original_length = len(meaningful_interfaces)
-
-                for index,interface in enumerate(meaningful_interfaces[:]):
-                    if not all(chain in domain_dict[PDB_code] for chain in interface.split('-')):
-                        del meaningful_interfaces[index + len(meaningful_interfaces) - original_length]
-                if not meaningful_interfaces:
+                domain_info = makeFormattedDomainInformation(meaningful_interfaces,domain_dict[PDB_code])
+                if not domain_info:
                     continue
-                
-                
-                
-                domain_info_raw = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] 
-                    else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
-                domain_info = {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in domain_info_raw.split(';') if len(dom)>1}
                 
                 new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info,
                     'BSAs': {K:BSA_av[K] for K in meaningful_interfaces}})
@@ -218,9 +227,28 @@ def downloadClusters(threshold):
     urllib.request.urlretrieve(f'ftp://resources.rcsb.org/sequence/clusters/bc-{threshold}.out', f'PDB_clusters_{threshold}.txt')
     print(f'Download successful')
 
+def getUniqueInteractions(row,used_cluster_interactions,redundant_pdbs,homomeric_mode=False):
+    unique_interactions = []
+    for interaction_pair in row['interfaces']:
+        cluster_indexes = []
+        for chain in interaction_pair.split('-'):
+            for index, cluster in enumerate(redundant_pdbs):
+                if f'{row["PDB_id"].upper()}_{chain}' in cluster:
+                    cluster_indexes.append(index)
+                    break
+                
+        cluster_indexes = tuple(cluster_indexes)
+        if homomeric_mode and cluster_indexes[0]!=cluster_indexes[1]:
+            print('Error, cannot be homomeric interaction but different clusters', row['PDB_id'], interaction_pair)
+
+        if cluster_indexes not in used_cluster_interactions:
+            used_cluster_interactions.add(cluster_indexes)
+            unique_interactions.append(interaction_pair)
+
+    return unique_interactions
     
 ## Filter dataset at a specific redundancy level
-def filterDataset(df,thresh,hom_mode=False):
+def filterDataset(df,thresh,homomeric_mode=False):
     assert thresh in VALID_THRESHOLDS, f'Not implemented for threshold value: {thresh}'
 
     cluster_file_path = f'PDB_clusters_{thresh}.txt'
@@ -236,27 +264,13 @@ def filterDataset(df,thresh,hom_mode=False):
     
     for _,row in df.iterrows():
         pdb = row['PDB_id']
-        unique_interactions = []
-        
-        for interaction_pair in row['interfaces']:
-            cluster_indexes = []
-            for chain in interaction_pair.split('-'):
-                for index, cluster in enumerate(redundant_pdbs):
-                    if f'{pdb.upper()}_{chain}' in cluster:
-                        cluster_indexes.append(index)
-                        break
 
-            cluster_indexes = tuple(cluster_indexes)
-            if hom_mode and cluster_indexes[0]!=cluster_indexes[1]:
-                print('Error, cannot be homomeric interaction but different clusters', pdb, interaction_pair)
-            
-            if cluster_indexes not in used_cluster_interactions:
-                used_cluster_interactions.add(cluster_indexes)
-                unique_interactions.append(interaction_pair)
+        unique_interactions = getUniqueInteractions(row,used_cluster_interactions,redundant_pdbs,homomeric_mode)
 
         if unique_interactions:
             flat_chains = {C for pair in unique_interactions for C in pair.split('-')}
-            new_df.append({'PDB_id':pdb,'interfaces':unique_interactions,'BSAs':{pair:row['BSAs'][pair] for pair in unique_interactions},'domains':{C:row['domains'][C] for C in flat_chains}})
+            new_df.append({'PDB_id':pdb,'interfaces':unique_interactions,'BSAs':{pair:row['BSAs'][pair]
+                for pair in unique_interactions},'domains':{C:row['domains'][C] for C in flat_chains}})
 
     return pandas.DataFrame(new_df)
 
@@ -269,4 +283,4 @@ def chainMap(extra=None):
     return dict(chainmap)
 
 def checkValidFASTA(file_name):
-    return os.path.exists(file_name) and os.path.getsize(file_name)   
+    return os.path.exists(file_name) and os.path.getsize(file_name)

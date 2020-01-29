@@ -30,14 +30,12 @@ def heteromericInteractionRunner(df_het):
         for interaction_pair in row['interfaces']:
             subunits = interaction_pair.split('-')
             mutual_domains = duplicateIntersection(*(domains[C] for C in subunits))
-            code = ('MUT' if domains[subunits[0]]== domains[subunits[1]] else 'MPA') if mutual_domains else 'DNO'              
+            code = ('MUT' if domains[subunits[0]]== domains[subunits[1]] else 'MPA') if mutual_domains else 'DNO'
             comparisons_to_make.append((f'{row["PDB_ID"]}_{subunits[0]}_{subunits[1]}',f'{row["PDB_ID"]}_{subunits[1]}_{subunits[0]}',code))
 
     return comparisons_to_make
 
-
 def shuffledInteractionDomains(df):
-
     table_of_observations = [[0,0],[0,0]]
     interaction_edges = []
 
@@ -55,8 +53,6 @@ def shuffledInteractionDomains(df):
     overlap_results = np.apply_along_axis(lambda x: duplicateIntersection(*x)!=(),arr=interaction_edges,axis=0)
     for form in (0,1):
         table_of_observations[1][form] = len(overlap_results[overlap_results==form])
-    
-    
 
     return table_of_observations, fisher_exact(table_of_observations)
 
@@ -64,22 +60,17 @@ def scrapePDBs(df):
     with open('period_pdb_codes.txt', 'w') as file_out:
         file_out.write(', '.join(df['PDB ID']))
 
-
-
 def getDomainPWeights(domains,samples=None):
     lengths = np.array([len(v) for v in domains.values()])
     return lengths/np.sum(lengths)
     
-    
 def RPS_wrapper(df_HET, df_HOM, N_SAMPLE_LIMIT,match_partials=False):
-
     unique_comparisons = set()
     RPS = newRPS(df_HET, df_HOM, match_partials)
 
     while len(unique_comparisons) < N_SAMPLE_LIMIT:
         unique_comparisons.add(next(RPS))
     return unique_comparisons
-        
 
 def newRPS(df_HET, df_HOM, match_partials=False):
     inverted_domains_HET = invertCSVDomains(df_HET,match_partials)
@@ -116,7 +107,7 @@ def newFPS(df_HET, df_HOM,match_partials=False):
             yield (chain_HET,chain_HOM)
 
 ##dead
-from scipy.stats import chi2_contingency
+
 def domainSubunitRewire(df):
 
     interaction_edges = []

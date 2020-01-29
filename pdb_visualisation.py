@@ -7,7 +7,7 @@ from collections import defaultdict
 import numpy as np
 from itertools import product
 
-from scipy.stats import expon, linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp, brunnermunzel, pearsonr, spearmanr,kendalltau,theilslopes, 
+from scipy.stats import expon, linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp, brunnermunzel, pearsonr, spearmanr,kendalltau,theilslopes
 
 from utility import loadCSV
 from domains import readDomains, domainMatch, duplicateIntersection

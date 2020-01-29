@@ -9,6 +9,11 @@ import shutil
 import urllib.request
 import ast
 
+import pandas
+from statistics import mean
+from domains import readDomains, invertDomains
+
+
 
 VALID_THRESHOLDS = {30,40,50,60,70,80,90,95,100}
 
@@ -81,7 +86,6 @@ def scrapePDBCodes(df):
     with open('periodic_pdb_codes.txt', 'w') as file_out:
         file_out.write(', '.join(df['PDB ID']))
     
-from domains import readDomains, invertDomains
 
 def invertCSVDomains(df, partials=False, homomeric=False):
     dom_dict = {}
@@ -93,8 +97,7 @@ def invertCSVDomains(df, partials=False, homomeric=False):
                 dom_dict[row['PDB_id']] = row['domains']
     return invertDomains(dom_dict,partials)
         
-import pandas
-from statistics import mean
+
 
 def downloadPeriodicData(fpath=''):
     print(f'Downloading periodic data from Science')

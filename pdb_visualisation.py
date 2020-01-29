@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-import seaborn as sns
+
 import glob
 import pandas as pd
 import json
@@ -7,10 +7,13 @@ from collections import defaultdict
 import numpy as np
 from itertools import product
 
-from scipy.stats import linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp, brunnermunzel
+from scipy.stats import expon, linregress, ks_2samp, anderson_ksamp, mannwhitneyu, epps_singleton_2samp, brunnermunzel, pearsonr, spearmanr,kendalltau,theilslopes, 
 
 from utility import loadCSV
 from domains import readDomains, domainMatch, duplicateIntersection
+
+from matplotlib.colors import LogNorm, Normalize
+ 
 
 
 def groupHeteromericBSAs(threshold=100,filter_immunoglobulins=False):
@@ -226,7 +229,7 @@ def plotSNS2(df,X_C='pval_F',Y_C='similarity',code=None):
     plt.show(block=False)
 
 
-from scipy.stats import brunnermunzel, pareto, pearsonr, spearmanr,kendalltau,theilslopes
+
 def plotCats(df,ax=None,ls='-',cmap='green',pval_type=''):
     N=6
     if ax is None:
@@ -301,7 +304,7 @@ def explore(df,filter_fails=True):
     
     plt.show(0)
 
-from matplotlib.colors import LogNorm, Normalize
+
 def hexbin(x, y, color, **kwargs):
     cmap = plt.get_cmap('cividis')
     #cmap = sns.light_palette(color, as_cmap=True)
@@ -311,7 +314,7 @@ def hexbin(x, y, color, **kwargs):
     print(spearmanr(x,y))
     print(np.median(x),np.mean(x))
 
-from scipy.stats import expon
+
 
 def hexIT(df,X_C='pval_S',Y_C='norm_OVR',sim_thresh=95,sigma=-1*np.log10(.05)):
     extent_codes = {'pval_F':(0,20),'pval_F2':(0,20),'pval_S':(0,20),'pval_S2':(0,20),'pval_T':(0,20),'pval_T2':(0,20),'similarity':(0,100),'norm_OVR':(0,1),'norm_SCR':(0,3),'split':(0,3)}

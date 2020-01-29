@@ -12,7 +12,9 @@ import numpy as np
 import scipy.stats
 import scipy.special
 import requests
+import csv
 
+from multiprocessing import Pool,Manager
 
 BASE_PATH, FASTA_PATH, INT_PATH, PALIGN_PATH, NEEDLE_PATH = '', '', '', '', ''
 needle_exec = ''
@@ -282,7 +284,7 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
     return (pcombine(alignment_scores,'fisher'),pcombine(alignment_scores,'stouffer'),pcombine(list(pmatrix[1:,1:].flatten())),pcombine(alignment_scores_alt,'fisher'),pcombine(alignment_scores_alt,'stouffer'),pcombine(list(pmatrix_alt[1:,1:].flatten())),len(alignment_scores),similarity,score,needle_length,noverlap)
 
         
-from multiprocessing import Pool,Manager
+
 
 def calculatePvalue(pdb_combination,WI_=False):
     (het,hom,code) = pdb_combination
@@ -294,7 +296,7 @@ def calculatePvalue(pdb_combination,WI_=False):
         print(het,hom,'!!Error!!:\t',e)
         return ((args,code), 'error')
 
-import csv
+
 def paralleliseAlignment(pdb_pairs,file_name):
     print('Parellelising alignment')
 

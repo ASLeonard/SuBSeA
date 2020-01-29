@@ -1,19 +1,25 @@
 ##local imports
 from domains import readDomains, invertDomains, getUniqueHomodimerDomains,domainMatch
 from SubSeA import paralleliseAlignment, calculatePvalue
-#from pdb_visualisation import scrubInput
 from utility import loadCSV, invertCSVDomains
 
 ##global imports
 import pandas
-from numpy.random import randint, choice
+from numpy.random import  choice
 from collections import defaultdict
 import os
 import json
 import argparse
-import matplotlib.pyplot as plt
+
 import numpy as np
 from itertools import product
+
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+from matplotlib.cm import ScalarMappable
+#import seaborn as sns
+
+from scipy.stats import spearmanr, fisher_exact, linregress
 
 def heteromericInteractionRunner(df_het):
     comparisons_to_make = []
@@ -393,10 +399,7 @@ def domainPairStatistics(df,df_HOM,ref_set=None):
     #print([(k,v) for k,v in domain_triplets.items() if (v[0]+v[1]-v[2])<-50])
     return np.array(list(domain_triplets.values()))
 
-from matplotlib.colors import LogNorm
-from matplotlib.cm import ScalarMappable
-import seaborn as sns
-from scipy.stats import spearmanr, linregress
+
 
 def plotStatRel(data_in):
     data = data_in.copy()
@@ -448,7 +451,6 @@ def plotStatRel(data_in):
     plt.show(0)
     #df = pandas.DataFrame(data_src,columns=['Hom','Het'])
     #return df
-    #sns.lmplot('Hom','Het',data=df,lowess=True)
 
 
 def heteromericOverlapStats(df,df2):
@@ -510,7 +512,7 @@ def heteromericPathwayStats(df,df2):
         
 
 
-from scipy.stats import fisher_exact
+
 def randomProteinSampler(df_HET, df_HOM, domain_mode, N_SAMPLE_LIMIT,match_partials=False):
     
     inverted_homodimer_domains = invertCSVDomains(df_HOM)

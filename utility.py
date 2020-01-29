@@ -96,18 +96,19 @@ def invertCSVDomains(df, partials=False, homomeric=False):
 import pandas
 from statistics import mean
 
-def makeDatasets(fpath='',heteromeric=True, threshold=100):
-    if not os.path.exists(f'{fpath}PeriodicTable.xlsx'):
-        downloadPeriodicData(fpath)
-    data = mergeSheets(fpath,heteromeric,1,1,0)
-    post_filter = filterDataset(data,threshold)
-    writeCSV(post_filter,('Heteromeric' if heteromeric else 'Homomeric')+f'_complexes_{threshold}.csv')
-
 def downloadPeriodicData(fpath=''):
     print(f'Downloading periodic data from Science')
     urllib.request.urlretrieve('https://science.sciencemag.org/highwire/filestream/671215/' +
     'field_highwire_adjunct_files/3/aaa2245-Ahnert-SM-table-S2.xlsx', f'{fpath}PeriodicTable.xlsx')
     print(f'Download successful')
+
+def makeDatasets(fpath='',heteromeric=True, threshold=100,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=False):
+    if not os.path.exists(f'{fpath}PeriodicTable.xlsx'):
+        downloadPeriodicData(fpath)
+
+    data = mergeSheets(fpath,heteromeric,use_identical_subunits,relabel,DEBUG_ignore_domains)
+    post_filter = filterDataset(data,threshold)
+    writeCSV(post_filter,('Heteromeric' if heteromeric else 'Homomeric')+f'_complexes_{threshold}.csv')
 
 def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=True):
 
@@ -124,7 +125,7 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
     data_heteromers = pandas.read_excel(f'{fpath}PeriodicTable.xlsx',sheet_name=[0,2])
 
     try:
-        domain_dict=readDomains('periodic2')
+        domain_dict=readDomains('periodic')
     except FileNotFoundError:
         print('given domain file doesn\'t exist, will start new one')
         domain_dict={}
@@ -139,8 +140,11 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
         
     new_rows = []
 
+
     for data in data_heteromers.values():
-        for _, row in data.iterrows():
+        for row_index, row in data.iterrows():
+            if DEBUG_ignore_domains and row_index > DEBUG_ignore_domains:
+                break
             PDB_code = row['PDB ID']
 
             if assembly_SYM in row and row[assembly_SYM] == 'M':
@@ -176,30 +180,30 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
 
                 BSA_av = {K:round(mean(V)) for K,V in BSAs.items()}
 
-                if not DEBUG_ignore_domains and PDB_code not in domain_dict:
+                if PDB_code not in domain_dict:
                     print('pulling for ',PDB_code)
                     domain_dict[PDB_code] = pullDomains(PDB_code)
                 
 
                 original_length = len(meaningful_interfaces)
+
                 for index,interface in enumerate(meaningful_interfaces[:]):
                     if not all(chain in domain_dict[PDB_code] for chain in interface.split('-')):
                         del meaningful_interfaces[index + len(meaningful_interfaces) - original_length]
                 if not meaningful_interfaces:
                     continue
                 
-                if DEBUG_ignore_domains:
-                    domain_info = ''
-                else:
-                    domain_info_raw = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] 
-                        else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
-                    domain_info = {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in domain_info_raw.split(';') if len(dom)>1}
                 
-                new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':dsomain_info,
+                
+                domain_info_raw = ';'.join([chain+':{}'.format(tuple(domain_dict[PDB_code][chain])) if chain in domain_dict[PDB_code] 
+                    else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
+                domain_info = {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in domain_info_raw.split(';') if len(dom)>1}
+                
+                new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info,
                     'BSAs': {K:BSA_av[K] for K in meaningful_interfaces}})
 
     if not DEBUG_ignore_domains:
-        with open('domain_architectures_periodic2.json', 'w') as file_out:
+        with open('domain_architectures_periodic.json', 'w') as file_out:
             file_out.write(json.dumps(domain_dict))
 
     return pandas.DataFrame(new_rows)

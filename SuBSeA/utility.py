@@ -1,6 +1,3 @@
-from SubSeA import pullFASTA
-from domains import pullDomains
-
 from collections import defaultdict
 import os
 import json
@@ -11,7 +8,7 @@ import ast
 
 import pandas
 from statistics import mean
-from domains import readDomains, invertDomains
+from SuBSeA.domains import readDomains, invertDomains, pullDomains
 
 VALID_THRESHOLDS = {30,40,50,60,70,80,90,95,100}
 
@@ -147,7 +144,7 @@ def makeFormattedDomainInformation(meaningful_interfaces,domain_slice):
     if not meaningful_interfaces:
         return False
 
-    domain_info_raw = ';'.join([chain+':{}'.format(tuple(domain_slice[chain])) if chain in domain_slice 
+    domain_info_raw = ';'.join([chain+':{}'.format(tuple(domain_slice[chain])) if chain in domain_slice
         else '' for chain in sorted({m for MI in meaningful_interfaces for m in MI.split('-')})])
     return {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in domain_info_raw.split(';') if len(dom)>1}
 
@@ -261,7 +258,7 @@ def filterDataset(df,thresh,homomeric_mode=False):
 
     used_cluster_interactions = set()
     new_df = []
-    
+
     for _,row in df.iterrows():
         pdb = row['PDB_id']
 

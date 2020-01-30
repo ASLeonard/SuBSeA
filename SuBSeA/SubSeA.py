@@ -37,8 +37,6 @@ def pullFASTA(pdb,chain):
                 file_.write('>{}_{}\n'.format(pdb,chain)+lines[idx+1])
                 return True
     return False
-
-
     
 ##run needle alignment on two pbd_chain inputs
 def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
@@ -63,10 +61,10 @@ def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
     
     print('about to run needle')
     try:
-        subprocess.run([f'{needle_EXEC}', f'{BASE_PATH}{FASTA_PATH}{pdb_1}_{chain_1}.fasta.txt', f'{BASE_PATH}{FASTA_PATH}{pdb_2}_{chain_2}.fasta.txt', '-auto', '-outfile', f'{BASE_PATH}{NEEDLE_PATH}{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle'],check=True)
+        subprocess.run([f'{needle_EXEC}', f'{BASE_PATH}{FASTA_PATH}{pdb_1}_{chain_1}.fasta.txt', f'{BASE_PATH}{FASTA_PATH}{pdb_2}_{chain_2}.fasta.txt',
+            '-auto', '-outfile', f'{BASE_PATH}{NEEDLE_PATH}{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle'],check=True)
     except subprocess.CalledProcessError as e:
         print('Needle based error:\n',e,'\nRaising now')
-
 
 def makeTypes(pdb,chain_1=None,chain_2=None):
     type_ = {}
@@ -115,7 +113,6 @@ def readNeedle(pdbs):
     return seqs, align, similarity, score
 
 def makeInteractions(type_, seq, chain):
-
     ##wrap double digit numbers to letters for chain ID'ing
     def wrapDoubleDigits(code):
         code_int = int(code)
@@ -154,8 +151,9 @@ def writePialign(pdbs,inter1a,inter1b,inter2a,inter2b,align,seq1,seq2):
             slice_ = slice(idx,idx+iter_chunk)
             idx_A+=iter_chunk-seq1[slice_].count('-')
             idx_B+=iter_chunk-seq2[slice_].count('-')
-          
-            pialign_out.write(f'{inter1b[slice_]}\n{inter1a[slice_]}\n{seq1[slice_]}   {idx_A}\n{align[slice_]}\n{seq2[slice_]}   {idx_B}\n{inter2a[slice_]}\n{inter2b[slice_]}\n\n')
+
+            pialign_out.write(f'{inter1b[slice_]}\n{inter1a[slice_]}\n{seq1[slice_]}   {idx_A}\n{align[slice_]}\n{seq2[slice_]}' +
+                f'    {idx_B}\n{inter2a[slice_]}\n{inter2b[slice_]}\n\n')
 
 def makePmatrix(pdbs,inter1a,inter1b,inter2a,inter2b,write=True):
     matrix = defaultdict(int)
@@ -195,8 +193,6 @@ def readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2):
         if swap[0] == '  ':
             swap[0]='-'
     return column_headers, row_headers, matrix
-
-    
                 
 def generateAssistiveFiles(pdbs,write_intermediates=False):
     if write_intermediates:
@@ -281,9 +277,8 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
     alignment_scores = findMinElements(val_matrix)
     alignment_scores_alt = findMinElements(val_matrix_alt)
 
-    return (pcombine(alignment_scores,'fisher'),pcombine(alignment_scores,'stouffer'),pcombine(list(pmatrix[1:,1:].flatten())),pcombine(alignment_scores_alt,'fisher'),pcombine(alignment_scores_alt,'stouffer'),pcombine(list(pmatrix_alt[1:,1:].flatten())),len(alignment_scores),similarity,score,needle_length,noverlap)
-
-        
+    return (pcombine(alignment_scores,'fisher'),pcombine(alignment_scores,'stouffer'),pcombine(list(pmatrix[1:,1:].flatten())),pcombine(alignment_scores_alt,'fisher'),
+        pcombine(alignment_scores_alt,'stouffer'),pcombine(list(pmatrix_alt[1:,1:].flatten())),len(alignment_scores),similarity,score,needle_length,noverlap)
 
 
 def calculatePvalue(pdb_combination,WI_=False):
@@ -309,8 +304,8 @@ def paralleliseAlignment(pdb_pairs,file_name):
         for progress, ((key,code),p_value) in enumerate(pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50)):
             #try:
             #    if os.path.exists('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key)):
-           #         pass
-           #         #os.remove('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key))
+            #         pass
+            #         #os.remove('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key))
             #except FileNotFoundError:
             #    print('File removal error')
 

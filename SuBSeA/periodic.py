@@ -1,7 +1,7 @@
 ##local imports
-from domains import readDomains, invertDomains, getUniqueHomodimerDomains,domainMatch
-from SubSeA import paralleliseAlignment, calculatePvalue
-from utility import loadCSV, invertCSVDomains
+from SuBSeA.domains import readDomains, invertDomains, getUniqueHomodimerDomains
+from SuBSeA.SubSeA import paralleliseAlignment, calculatePvalue
+from SuBSeA.utility import loadCSV, invertCSVDomains
 
 ##global imports
 import pandas
@@ -19,7 +19,7 @@ from matplotlib.colors import LogNorm
 from matplotlib.cm import ScalarMappable
 #import seaborn as sns
 
-from scipy.stats import spearmanr, fisher_exact, linregress
+from scipy.stats import spearmanr, fisher_exact
 
 def heteromericInteractionRunner(df_het):
     comparisons_to_make = []
@@ -493,11 +493,7 @@ def heteromericPathwayStats(df,df2):
     #return counts
     qq=np.array(list(counts.values()))
     return qq
-    
-    plt.figure()
-    plt.hist2d(*qq.T,bins=[np.linspace(0,50,51)]*2,norm=LogNorm())
-    plt.colorbar()
-    plt.show(0)
+
             
 
         
@@ -660,7 +656,8 @@ def main(args):
   
 
     if args.json:
-        with open('{}_{}_comparison.dict'.format('Table' if args.exec_source else 'PDB', args.file_name or ('domain_match' if args.exec_mode else 'random')),'w') as f_out:
+        with open('{}_{}_comparison.dict'.format('Table' if args.exec_source else 'PDB',
+            args.file_name or ('domain_match' if args.exec_mode else 'random')),'w') as f_out:
             json.dump(results,f_out)
     else:
 
@@ -696,7 +693,7 @@ if __name__ == "__main__":
     parser.add_argument('--file_name', type=str,dest='file_name')
     parser.add_argument('--partial', action='store_true',dest='allow_partials')
     parser.set_defaults(exec_style=False,exec_mode=None,exec_source=True,N_samples=None,file_name=None,allow_partials=False,json=False,filter_level=50)
-    
+
     args = parser.parse_args()
 
     if not args.exec_mode:
@@ -707,7 +704,4 @@ if __name__ == "__main__":
         print('Random sampling amount defaulted to 10,000')
         args.N_samples = 10000
 
-
     main(args)
-
-

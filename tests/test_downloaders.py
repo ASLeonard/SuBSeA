@@ -1,4 +1,4 @@
-import pisa_XML, domains, SubSeA, utility
+from SuBSeA import pisa_XML, domains, SubSeA, utility
 import os
 
 def test_all_FASTA_download(capsys):

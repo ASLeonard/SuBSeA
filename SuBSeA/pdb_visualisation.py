@@ -8,8 +8,8 @@ from itertools import product
 
 from scipy.stats import expon,linregress,ks_2samp,anderson_ksamp,mannwhitneyu,epps_singleton_2samp,brunnermunzel,pearsonr,spearmanr,kendalltau,theilslopes
 
-from utility import loadCSV
-from domains import readDomains, duplicateIntersection
+from SuBSeA.utility import loadCSV
+from SuBSeA.domains import readDomains, duplicateIntersection
 
 from matplotlib.colors import Normalize
  
@@ -68,12 +68,11 @@ def commonLanguageES(lows, highs):
 
 
 def makeCSV(df,domain):
-    
     domain_dict=readDomains(domain)
     new_rows = []
 
     for _, row in df.iterrows():
-        domain_info = ';'.join([chain+':{}'.format(tuple(domain_dict[row['id'][:4]][chain])) if chain in domain_dict[row['id'][:4]] else '' 
+        domain_info = ';'.join([chain+':{}'.format(tuple(domain_dict[row['id'][:4]][chain])) if chain in domain_dict[row['id'][:4]] else ''
             for chain in row['chains']] )
         
         new_rows.append({'PDB_id':row['id'][:4], 'interfaces':'-'.join(sorted(row['chains'])),
@@ -298,40 +297,60 @@ def hexbin(x, y, color, **kwargs):
     print(np.median(x),np.mean(x))
 
 
+def plotNormOVR(df,sigma=-np.log10(.05),x_var='norm_OVR',stat_func=brunnermunzel):
+    df['sig']=df.pval_S>=sigma
+    df.loc[df.code=='MPA','code'] = 'MUT'
 
-def plotHeteromericConfidenceDecay(df,x_var = 'pval_S',sigma=-1,sim_thresh=90):
-
-    df = df.loc[df['similarity'] <= sim_thresh]
-    var = np.var(df[x_var])
-    print(f'Variance in x_var is {var}')
-    val_cut = sigma if isinstance(sigma,float) else sigma*var
-    df = df[df[x_var]>val_cut]
+    print(f'Statistics for x-var: {x_var}')
+    for domain_match in ('MUT','DNO'):
+        positive_group = df.loc[(df.code==domain_match) & (df.sig==True)]
+        negative_group = df.loc[(df.code==domain_match) & (df.sig==False)]
+        print(f'\tDomain overlap: {domain_match} = {stat_func(negative_group[x_var],positive_group[x_var])[1]}')
+        print(f'\t  Positive mean: {np.mean(positive_group[x_var]):.2f} ({np.std(positive_group[x_var]):.2f})')
+        print(f'\t  Negative mean: {np.mean(negative_group[x_var]):.2f} ({np.std(negative_group[x_var]):.2f})')
+        #print(commonLanguageES(negative_group[x_var],positive_group[x_var]))
     
+    sns.violinplot('code',x_var,data=df,hue='sig',cut=0,orient='v',inner='quartile',scale_hue=True,scale='area',split=True)
+    plt.show(0)
+
+def plotHeteromericConfidenceDecay(df,x_var = 'pval_S',sigma=-1,sim_thresh=95,MIN_SF=0.01):
+    ## filter out "overly" similar protein subunits
+    df = df.loc[df['similarity'] <= sim_thresh]
+
+    ## filter out alignments below significance threshold based on variance
+    var = np.var(df[x_var])
+    print(f'Variance in x_var ({x_var}) is {var:.2f}')
+    val_cut = sigma if isinstance(sigma,float) else sigma*var    
+    df = df[df[x_var]>val_cut]
     
     plt.figure()
     cdc= {'MUT':('H','darkorange'),'MPA':('P','forestgreen'),'DNO':('p','royalblue')}
-    df.loc[df.code=='MPA',1] = 'MUT'
-    P_STARS = np.linspace(0,15,101)
-    
-    for code in ('MUT','MPA','DNO'):
+    df.loc[df.code=='MPA','code'] = 'MUT'
+
+    P_STARS = np.linspace(0,40,501)
+
+    for ind,code in enumerate(('MUT','MPA','DNO')):
         df_c = df[df.code==code][x_var]
         if len(df_c)==0:
             continue
         print(f'Heteromeric grouping: {code}, {len(df_c)} entries.')
-        
+
         cdf = np.array([np.sum(df_c>=p_star) for p_star in P_STARS])
-        cdf = np.log10(cdf/cdf.max())
-                
+
+        np.seterr(divide='ignore')
+        cdf = np.log10(cdf/np.nanmax(cdf))
+        np.seterr(divide='warn')
+
         #cut off data to prevent outliers dominating
-        cdf = cdf[cdf>=np.log10(.01)]
+        cdf = cdf[cdf>=np.log10(MIN_SF)]
         #similarly trim data so fit is only in statistically strong region
-        cdf_sl = cdf[cdf>=np.log10(.01)]
-        
+        cdf_sl = cdf[cdf>=np.log10(MIN_SF)]
+
         plt.plot(P_STARS[:len(cdf)],cdf,c=cdc[code][1],marker=cdc[code][0],ms=20,mfc='None',mew=3,lw=3,ls='--',markevery=[-1])
 
         slope, iner, *var = linregress(P_STARS[0:len(cdf_sl)],cdf_sl[0:])
-        plt.plot(P_STARS[0:len(cdf)],slope*P_STARS[0:len(cdf)]+iner,':')
-        
+        plt.plot(P_STARS[0:len(cdf)],slope*P_STARS[0:len(cdf)]+iner,':',c=cdc[code][1],lw=2)
+
         print(f'Power law fit: {slope:.3f}, initial drop is {cdf[1]*100:.1f}%')
 
     plt.show(0)
@@ -342,13 +361,10 @@ def plotGap(df,sigma=3,X_C='similarity',Y_C='gapX',H_C='norm_OVR'):
     var = np.var(df[df.pval_S2>0]['pval_S'])
     
     df = df.loc[(df['norm_OVR'] > -.01) & (df['pval_S']>1*sigma*var)]
-    
 
     #df_scaled.pval_S = df_scaled.pval_S*-1
-    
     #df_scaled.pval_S2 = df_scaled.pval_S2*-1
     #df = df_scaled
-    
     df['gapX'] = df.norm_OVR - df.similarity/100
 
     g = sns.FacetGrid(df,col="code", height=4,col_wrap=2,col_order=['MUT','MPA','DNO'])

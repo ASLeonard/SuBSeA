@@ -1,4 +1,4 @@
-import pisa_XML, domains, SubSeA, utility, pdb_visualisation
+from SuBSeA import pisa_XML, domains, SubSeA, utility, pdb_visualisation
 import os
 
 def test_invert_domains(capsys):
@@ -35,7 +35,7 @@ def test_SuBSeA(capsys):
         print('running calc')
         assert (SubSeA.calculatePvalue(('1A00_C_D','1A00_D_C','MUT'),WI_=False)[1] != 'error'), 'Didn\'t work'
         print('With writing intermediate files')
-        SubSeA.calculatePvalue(('1BND_A_B','1BND_B_A','MUT'),WI_=True)[1] != 'error', 'Didn\'t work'
+        assert (SubSeA.calculatePvalue(('1BND_A_B','1BND_B_A','MUT'),WI_=True)[1] != 'error'), 'Didn\'t work'
         print('calculations over, now cleaning files')
     ##clean up
     for pdb, chains in (('1A00',('C','D')),('1BND',('A','B'))):

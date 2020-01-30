@@ -303,8 +303,8 @@ def plotNormOVR(df,sigma=-np.log10(.05),x_var='norm_OVR',stat_func=brunnermunzel
 
     print(f'Statistics for x-var: {x_var}')
     for domain_match in ('MUT','DNO'):
-        positive_group = df.loc[(df.code==domain_match) & (df.sig==True)]
-        negative_group = df.loc[(df.code==domain_match) & (df.sig==False)]
+        positive_group = df.loc[(df.code==domain_match) & (df.sig)]
+        negative_group = df.loc[(df.code==domain_match) & (!df.sig)]
         print(f'\tDomain overlap: {domain_match} = {stat_func(negative_group[x_var],positive_group[x_var])[1]}')
         print(f'\t  Positive mean: {np.mean(positive_group[x_var]):.2f} ({np.std(positive_group[x_var]):.2f})')
         print(f'\t  Negative mean: {np.mean(negative_group[x_var]):.2f} ({np.std(negative_group[x_var]):.2f})')
@@ -320,7 +320,7 @@ def plotHeteromericConfidenceDecay(df,x_var = 'pval_S',sigma=-1,sim_thresh=95,MI
     ## filter out alignments below significance threshold based on variance
     var = np.var(df[x_var])
     print(f'Variance in x_var ({x_var}) is {var:.2f}')
-    val_cut = sigma if isinstance(sigma,float) else sigma*var    
+    val_cut = sigma if isinstance(sigma,float) else sigma*var  
     df = df[df[x_var]>val_cut]
     
     plt.figure()
@@ -329,7 +329,7 @@ def plotHeteromericConfidenceDecay(df,x_var = 'pval_S',sigma=-1,sim_thresh=95,MI
 
     P_STARS = np.linspace(0,40,501)
 
-    for ind,code in enumerate(('MUT','MPA','DNO')):
+    for code in ('MUT','MPA','DNO'):
         df_c = df[df.code==code][x_var]
         if len(df_c)==0:
             continue

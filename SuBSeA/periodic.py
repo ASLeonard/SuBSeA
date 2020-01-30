@@ -1,5 +1,5 @@
 ##local imports
-from SuBSeA.domains import readDomains, invertDomains, getUniqueHomodimerDomains
+from SuBSeA.domains import readDomains, invertDomains
 from SuBSeA.SubSeA import paralleliseAlignment, calculatePvalue
 from SuBSeA.utility import loadCSV, invertCSVDomains
 

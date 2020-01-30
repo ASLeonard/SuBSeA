@@ -6,7 +6,6 @@
 
 Package to test qualitative hypotheses generated from the [polyomino evolution through duplication study](https://github.com/ASLeonard/duplication "Polyomino duplication repository").
 
-
 ## Purpose
 
 ## Install

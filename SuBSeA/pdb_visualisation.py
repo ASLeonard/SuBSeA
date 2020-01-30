@@ -304,7 +304,7 @@ def plotNormOVR(df,sigma=-np.log10(.05),x_var='norm_OVR',stat_func=brunnermunzel
     print(f'Statistics for x-var: {x_var}')
     for domain_match in ('MUT','DNO'):
         positive_group = df.loc[(df.code==domain_match) & (df.sig)]
-        negative_group = df.loc[(df.code==domain_match) & (!df.sig)]
+        negative_group = df.loc[(df.code==domain_match) & (not df.sig)]
         print(f'\tDomain overlap: {domain_match} = {stat_func(negative_group[x_var],positive_group[x_var])[1]}')
         print(f'\t  Positive mean: {np.mean(positive_group[x_var]):.2f} ({np.std(positive_group[x_var]):.2f})')
         print(f'\t  Negative mean: {np.mean(negative_group[x_var]):.2f} ({np.std(negative_group[x_var]):.2f})')

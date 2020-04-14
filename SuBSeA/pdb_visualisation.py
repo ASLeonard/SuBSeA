@@ -6,8 +6,7 @@ from collections import defaultdict
 import numpy as np
 from itertools import product
 
-from scipy.stats import expon,linregress,ks_2samp,anderson_ksamp,mannwhitneyu,epps_singleton_2samp,brunnermunzel,pearsonr,spearmanr,kendalltau,theilslopes
-
+from scipy.stats import expon,linregress,ks_2samp,anderson_ksamp,mannwhitneyu,epps_singleton_2samp,brunnermunzel,pearsonr,spearmanr,kendalltau
 from SuBSeA.utility import loadCSV
 from SuBSeA.domains import readDomains, duplicateIntersection
 
@@ -134,8 +133,7 @@ def loadALL(sample=None,rscratch=True):
             DFs[i] = DFs[i].sample(sample)
         
 
-    for i in range(len(DFs)):
-        df=DFs[i]
+    for i, df  in enumerate(DFs):
         df['gaps'] = df['align_length']-df['overlap']
         df['sg'] =  df['similarity']//5
         df['norm_OVR'] = df['overlap']/df['align_length']
@@ -320,7 +318,7 @@ def plotHeteromericConfidenceDecay(df,x_var = 'pval_S',sigma=-1,sim_thresh=95,MI
     ## filter out alignments below significance threshold based on variance
     var = np.var(df[x_var])
     print(f'Variance in x_var ({x_var}) is {var:.2f}')
-    val_cut = sigma if isinstance(sigma,float) else sigma*var  
+    val_cut = sigma if isinstance(sigma,float) else sigma*var
     df = df[df[x_var]>val_cut]
     
     plt.figure()
@@ -359,9 +357,8 @@ def plotGap(df,sigma=3,X_C='similarity',Y_C='gapX',H_C='norm_OVR'):
     df = df.loc[df['similarity'] < 95]
 
     var = np.var(df[df.pval_S2>0]['pval_S'])
-    
-    df = df.loc[(df['norm_OVR'] > -.01) & (df['pval_S']>1*sigma*var)]
 
+    df = df.loc[(df['norm_OVR'] > -.01) & (df['pval_S']>1*sigma*var)]
     #df_scaled.pval_S = df_scaled.pval_S*-1
     #df_scaled.pval_S2 = df_scaled.pval_S2*-1
     #df = df_scaled

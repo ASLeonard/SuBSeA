@@ -5,8 +5,9 @@ import os
 from collections import defaultdict
 from operator import itemgetter
 from time import sleep
+import argparse
 
-import subprocess #no sec
+import subprocess
 import numpy as np
 
 import scipy.stats
@@ -84,7 +85,7 @@ def makeTypes(pdb,chain_1=None,chain_2=None):
                 type_[chain+res] = tuple(reversed(interactions[0][0].split('_')))
     return type_
 
-##scrape FASTA sequence for both chains, and the alignment interactions 
+##scrape FASTA sequence for both chains, and the alignment interactions
 def readNeedle(pdbs):
     seqs, align = ['', ''], ''
     read = 0
@@ -254,7 +255,6 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
         return (1,1,1, 1,1,1, 0,similarity,score,needle_length,noverlap)
 
     colsums,rowsums = np.meshgrid(*(np.sum(matrix,axis=I) for I in (1,0)),indexing='ij')
-    
 
     pmatrix = binomialcdf(matrix,rowsums,colsums,*length,novg=noverlap,N_FACTOR=True)
     pmatrix_alt = binomialcdf(matrix,rowsums,colsums,*length,novg=noverlap,N_FACTOR=False)
@@ -320,3 +320,26 @@ def paralleliseAlignment(pdb_pairs,file_name):
 
     print('Finished parallel mapping')
     return list(results)
+
+def main(args):
+    from pisa_XML import pullXML
+    pullXML([args.subunit_1,args.subunit_2])
+    os.environ['EMBOSS_ACDROOT'] = os.getcwd()
+    print(calculatePvalue([f'{args.subunit_1}_{args.chain_1}_{args.chain_2}',f'{args.subunit_2}_{args.chain_2}_{args.chain_1}','ignore'])[1])
+    
+    for ext in ('int','xml'):    
+        os.remove(f'{args.subunit_1}.{ext}')
+    os.remove(f'{args.subunit_1}_{args.chain_1}_{args.subunit_2}_{args.chain_2}.needle')
+    os.remove(f'{args.subunit_1}_{args.chain_1}.fasta.txt')
+    os.remove(f'{args.subunit_2}_{args.chain_2}.fasta.txt')
+    
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description = 'SuBSeA')
+    parser.add_argument('subunit_1', type=str)
+    parser.add_argument('chain_1', type=str)
+    parser.add_argument('subunit_2', type=str)
+    parser.add_argument('chain_2', type=str)
+    args = parser.parse_args()
+
+    main(args)

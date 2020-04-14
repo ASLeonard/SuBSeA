@@ -170,7 +170,7 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--txt', action='store_true',dest='file_format')
     group.add_argument('--csv', action='store_false',dest='file_format')
-    
+
     parser.add_argument('-N','--file_name', type=str,dest='file_name')
     parser.add_argument('-P','--file_path', type=str,dest='file_path')
     parser.add_argument('-X','--XML_path', type=str,dest='XML_path')

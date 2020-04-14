@@ -26,7 +26,6 @@ def downloadAllFASTA_GZ(fpath=''):
     formatBulkFASTA(fpath,'all_fasta.txt')
     print(f'All FASTA sequences formatted into "{fpath}minimal_all_fasta.txt"')
     os.remove(f'{fpath}all_fasta.txt')
-    
 
 def formatBulkFASTA(fpath,fname,out_name=None):
     if not out_name:
@@ -252,7 +251,7 @@ def filterDataset(df,thresh,homomeric_mode=False):
 
     if not os.path.exists(cluster_file_path):
         downloadClusters(thresh)
-        
+
     with open(cluster_file_path) as cluster_file:
         redundant_pdbs = [set(line.split()) for line in cluster_file]
 

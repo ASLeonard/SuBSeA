@@ -1,5 +1,5 @@
 ##local imports
-from SuBSeA.domains import readDomains, invertDomains
+from SuBSeA.domains import readDomains
 from SuBSeA.SubSeA import paralleliseAlignment, calculatePvalue
 from SuBSeA.utility import loadCSV, invertCSVDomains
 
@@ -145,8 +145,7 @@ def conv(dq):
 
 def sharedMatchingAlgorithm2(df_HET, df_HOM):
     inverted_domains_HOM_full = invertCSVDomains(df_HOM,False,True)
-    inverted_domains_HOM_partial = invertCSVDomains(df_HOM,True,True)
-
+    #inverted_domains_HOM_partial = invertCSVDomains(df_HOM,True,True)
     
     comparisons_to_make = []
     fail_c=0
@@ -212,7 +211,7 @@ def sharedMatchingAlgorithm(df_HET, df_HOM):
         interactions = row['interfaces']
         flat_chains = {chain for interaction in interactions for chain in interaction.split('-')}
 
-        partner_domains = defaultdict(dict)
+        #partner_domains = defaultdict(dict)
 
         shared=[]
         for flat_chain in flat_chains:
@@ -278,7 +277,8 @@ def sharedMatchingAlgorithm(df_HET, df_HOM):
         partial_comparisons_N -= partial_comparisons_S
         partial_comparisons_N -= full_comparisons_N
         
-        for data, code in zip((matched_comparisons,mutual_comparisons,full_comparisons_S,full_comparisons_N,partial_comparisons_S,partial_comparisons_N),('MF','MP','FS','FN','PS','PN')):
+        for data, code in zip((matched_comparisons,mutual_comparisons,full_comparisons_S,full_comparisons_N,partial_comparisons_S,partial_comparisons_N),
+('MF','MP','FS','FN','PS','PN')):
             comparisons_to_make.extend([comp+(code,) for comp in data])
     print('Shared domains on ',ss)
     return comparisons_to_make
@@ -363,7 +363,8 @@ def domainPairStatistics(df,df_HOM,ref_set=None):
 
     for ids, domains, interactions in zip(df['PDB_id'],df['domains'],df['interfaces']):
         for interaction in interactions:
-            if ref_set and f'{ids.upper()}_{interaction[0]}_{interaction[2]}_{ids.upper()}_{interaction[2]}_{interaction[0]}' not in ref_set and f'{ids.upper()}_{interaction[2]}_{interaction[0]}_{ids.upper()}_{interaction[0]}_{interaction[2]}' not in ref_set:
+            if ref_set and f'{ids.upper()}_{interaction[0]}_{interaction[2]}_{ids.upper()}_{interaction[2]}_{interaction[0]}' not in ref_set 
+            and f'{ids.upper()}_{interaction[2]}_{interaction[0]}_{ids.upper()}_{interaction[0]}_{interaction[2]}' not in ref_set:
                 print('skip', f'{ids.upper()}_{interaction[0]}_{interaction[2]}_{ids.upper()}_{interaction[2]}_{interaction[0]}',list(ref_set)[0])
                 continue
 
@@ -467,7 +468,8 @@ def heteromericOverlapStats(df,df2):
                 fractions[1][any(od in homomeric_domains for od in set(unique_domains))]+=1
                 
                 
-    print(f'Domain co-occurence\nHH: {fractions[0][0]}/{sum(fractions[0])} ({fractions[0][0]/sum(fractions[0]):.3f}%)\nDH: {fractions[1][0]}/{sum(fractions[1])} ({fractions[1][0]/sum(fractions[1]):.3f}%)')
+    print(f'Domain co-occurence\nHH: {fractions[0][0]}/{sum(fractions[0])} ({fractions[0][0]/sum(fractions[0]):.3f}%) \
+            \nDH: {fractions[1][0]}/{sum(fractions[1])} ({fractions[1][0]/sum(fractions[1]):.3f}%)')
     return fractions
 
     
@@ -571,7 +573,8 @@ def randomProteinSampler(df_HET, df_HOM, domain_mode, N_SAMPLE_LIMIT,match_parti
     if domain_mode == 'match':
         return
     
-    #homodimer_set = list(f'{p}_{list(c)[0]}' for p,c,D in zip(homodimer_table['PDB_id'],homodimer_table['interfaces'],homodimer_table['domains']) if (list(c)[0] in D and D[list(c)[0]] in heteromer_domains))
+    #homodimer_set = list(f'{p}_{list(c)[0]}' for p,c,D in zip(homodimer_table['PDB_id'],homodimer_table['interfaces'],homodimer_table['domains'])
+    #if (list(c)[0] in D and D[list(c)[0]] in heteromer_domains))
     #heteromer_set = list(f'{p}_{j}' for p,c,D in zip(df['PDB_id'],df['interfaces'],df['domains']) for i in c for j in i.split('-') if j in D)
 
     homodimer_domains = {}
@@ -599,10 +602,10 @@ def randomProteinSampler(df_HET, df_HOM, domain_mode, N_SAMPLE_LIMIT,match_parti
         return
 
     ##elif domain_mode =='random'
-    else: 
+    else:
         for pairing in zip(choice(heteromer_set,N_SAMPLE_LIMIT,True),choice(homodimer_set,N_SAMPLE_LIMIT,True)):
             yield pairing
-        return  
+        return
 
 def chainMap():
     chainmap = defaultdict(dict)
@@ -699,7 +702,7 @@ if __name__ == "__main__":
     if not args.exec_mode:
         print('Defaulting to random alignment')
         args.exec_mode = 'random'
- 
+
     if args.exec_mode != 'match' and not args.N_samples:
         print('Random sampling amount defaulted to 10,000')
         args.N_samples = 10000

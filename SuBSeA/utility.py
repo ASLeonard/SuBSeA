@@ -242,7 +242,7 @@ def getUniqueInteractions(row,used_cluster_interactions,redundant_pdbs,homomeric
             unique_interactions.append(interaction_pair)
 
     return unique_interactions
-    
+
 ## Filter dataset at a specific redundancy level
 def filterDataset(df,thresh,homomeric_mode=False):
     assert thresh in VALID_THRESHOLDS, f'Not implemented for threshold value: {thresh}'

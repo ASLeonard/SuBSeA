@@ -19,7 +19,7 @@ def checkINTExisting(df):
 def pullXML(pdb_code_file):
     print('Loading PDB files')
     print(BASE_PATH,XML_PATH,INT_PATH)
-    
+
     pdbs = []
 
     if isinstance(pdb_code_file,str):

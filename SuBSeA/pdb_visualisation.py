@@ -6,7 +6,7 @@ from collections import defaultdict
 import numpy as np
 from itertools import product
 
-from scipy.stats import expon,linregress,ks_2samp,anderson_ksamp,mannwhitneyu,epps_singleton_2samp,brunnermunzel,pearsonr,spearmanr,kendalltau
+from scipy.stats import expon,linregress,ks_2samp,anderson_ksamp,mannwhitneyu,epps_singleton_2samp,brunnermunzel,pearsonr,spearmanr
 from SuBSeA.utility import loadCSV
 from SuBSeA.domains import readDomains, duplicateIntersection
 
@@ -129,8 +129,8 @@ def loadALL(sample=None,rscratch=True):
     DFs = [loadDF(f'{rscratch}{NAME}',csv_save=True) for NAME in ('Trial_70','Trial_90')]
 
     if sample:
-        for i in range(len(DFs)):
-            DFs[i] = DFs[i].sample(sample)
+        for i,df in enumerate(DFs):
+            DFs[i] = df.sample(sample)
         
 
     for i, df  in enumerate(DFs):
@@ -320,7 +320,7 @@ def plotHeteromericConfidenceDecay(df,x_var = 'pval_S',sigma=-1,sim_thresh=95,MI
     print(f'Variance in x_var ({x_var}) is {var:.2f}')
     val_cut = sigma if isinstance(sigma,float) else sigma*var
     df = df[df[x_var]>val_cut]
-    
+
     plt.figure()
     cdc= {'MUT':('H','darkorange'),'MPA':('P','forestgreen'),'DNO':('p','royalblue')}
     df.loc[df.code=='MPA','code'] = 'MUT'

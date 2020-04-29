@@ -2,6 +2,8 @@
 
 import os
 
+from pisa_XML import pullXML
+
 from collections import defaultdict
 from operator import itemgetter
 from time import sleep
@@ -322,17 +324,19 @@ def paralleliseAlignment(pdb_pairs,file_name):
     return list(results)
 
 def main(args):
-    from pisa_XML import pullXML
+    
     pullXML([args.subunit_1,args.subunit_2])
     os.environ['EMBOSS_ACDROOT'] = os.getcwd()
-    print(calculatePvalue([f'{args.subunit_1}_{args.chain_1}_{args.chain_2}',f'{args.subunit_2}_{args.chain_2}_{args.chain_1}','ignore'])[1])
-    
-    for ext in ('int','xml'):    
+
+    alt_chain_1, alt_chain_2 = args.alternate_chains or (args.chain_2,args.chain_1)
+
+    print(calculatePvalue([f'{args.subunit_1}_{args.chain_1}_{alt_chain_1}',f'{args.subunit_2}_{args.chain_2}_{alt_chain_2}','ignore'])[1])
+
+    for ext in ('int','xml'):
         os.remove(f'{args.subunit_1}.{ext}')
     os.remove(f'{args.subunit_1}_{args.chain_1}_{args.subunit_2}_{args.chain_2}.needle')
     os.remove(f'{args.subunit_1}_{args.chain_1}.fasta.txt')
     os.remove(f'{args.subunit_2}_{args.chain_2}.fasta.txt')
-    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'SuBSeA')
@@ -340,6 +344,7 @@ if __name__ == "__main__":
     parser.add_argument('chain_1', type=str)
     parser.add_argument('subunit_2', type=str)
     parser.add_argument('chain_2', type=str)
+    parser.add_argument('--alternate_chains', nargs='+',type=str,default=None)
     args = parser.parse_args()
 
     main(args)

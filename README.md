@@ -11,16 +11,16 @@ This program compares the binding residues from macromolecular interfaces with o
 ## Components
 There are several main components to the analysis pipeline, outlined below.
 
-  - Protein complex dataset generation
-   - utility.py
-  - Bioinformatic data pulling
-   - domains.py
-   - pisa_XML.py
-  - SuBSeA analysis
-   - periodic.py
-   - SuBSeA.py
-  - Visualisation
-   - pdb_visualisation.py
+- Protein complex dataset generation
+  - utility.py
+- Bioinformatic data pulling
+  - domains.py
+  - pisa_XML.py
+- SuBSeA analysis
+  - pipeline_runner.py
+  - binding_alignment.py
+- Visualisation
+  - pdb_visualisation.py
 
 ## Install
 
@@ -66,8 +66,8 @@ Not all protein complexes are stored in standard formats. Particularly, there ar
 
 The full analysis requires
 
-  - FASTA sequence
-  - PDBePISA macromolecular interfaces
-  - CATH domains (or other homology identifier)
+- FASTA sequence
+- PDBePISA macromolecular interfaces
+- CATH domains (or other homology identifier)
 
 Any protein complex with incomplete data will struggle in this analysis, so only a subset of recorded proteins can be used correctly.

@@ -1,4 +1,4 @@
-from SuBSeA import pisa_XML, domains, SubSeA, utility, pdb_visualisation
+from SuBSeA import pisa_XML, domains, binding_alignment, utility, pdb_visualisation
 import os
 
 def test_invert_domains(capsys):
@@ -27,23 +27,17 @@ def test_SuBSeA(capsys):
     pisa_XML.pullXML(['1A00','1BND'])
     for pdb, chains in (('1A00',('C','D')),('1BND',('A','B'))):
         for chain in chains:
-            SubSeA.pullFASTA(pdb,chain)
+            binding_alignment.pullFASTA(pdb,chain)
 
     with capsys.disabled():
         print('Setting EMBOSS_ACDROOT variable to current directory')
         os.environ['EMBOSS_ACDROOT'] = os.getcwd()
         print('running calc')
-        assert (SubSeA.calculatePvalue(('1A00_C_D','1A00_D_C','MUT'),WI_=False)[1] != 'error'), 'Didn\'t work'
+        assert (binding_alignment.calculatePvalue(('1A00_C_D','1A00_D_C','MUT'),WI_=False)[1] != 'error'), 'Didn\'t work'
         print('With writing intermediate files')
-        assert (SubSeA.calculatePvalue(('1BND_A_B','1BND_B_A','MUT'),WI_=True)[1] != 'error'), 'Didn\'t work'
+        assert (binding_alignment.calculatePvalue(('1BND_A_B','1BND_B_A','MUT'),WI_=True)[1] != 'error'), 'Didn\'t work'
         print('calculations over, now cleaning files')
     ##clean up
-    for pdb, chains in (('1A00',('C','D')),('1BND',('A','B'))):
-        for chain in chains:
-            os.remove(f'{pdb}_{chain}.fasta.txt')
-    for ext_n in ('xml','int'):
-        for temp_file in ('1A00','1BND'):
-            os.remove(f'{temp_file}.{ext_n}')
 
     for ext_n in ('needle','pmatrix','pialign'):
         os.remove(f'1BND_A_1BND_B.{ext_n}')

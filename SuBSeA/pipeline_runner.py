@@ -1,7 +1,7 @@
 ##local imports
-from SuBSeA.domains import readDomains
-from SuBSeA.SubSeA import paralleliseAlignment, calculatePvalue
-from SuBSeA.utility import loadCSV, invertCSVDomains
+from domains import readDomains
+from binding_alignment import calculatePvalue
+from utility import loadCSV, invertCSVDomains, makeDatasets
 
 ##global imports
 import pandas
@@ -17,9 +17,10 @@ from itertools import product
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib.cm import ScalarMappable
-#import seaborn as sns
 
 from scipy.stats import spearmanr, fisher_exact
+
+from multiprocessing import Pool,Manager
 
 def heteromericInteractionRunner(df_het):
     comparisons_to_make = []
@@ -44,9 +45,8 @@ def shuffledInteractionDomains(df):
             local_domains = [domains[C] for C in interaction.split('-')]
             table_of_observations[0][duplicateIntersection(*local_domains) != ()] += 1
             interaction_edges.extend(local_domains)
-
     interaction_edges = np.asarray(interaction_edges)
-    ##shuffle it
+
     np.random.shuffle(interaction_edges)
     interaction_edges = interaction_edges.reshape((2,-1))
 
@@ -363,10 +363,10 @@ def domainPairStatistics(df,df_HOM,ref_set=None):
 
     for ids, domains, interactions in zip(df['PDB_id'],df['domains'],df['interfaces']):
         for interaction in interactions:
-            if ref_set and f'{ids.upper()}_{interaction[0]}_{interaction[2]}_{ids.upper()}_{interaction[2]}_{interaction[0]}' not in ref_set 
-            and f'{ids.upper()}_{interaction[2]}_{interaction[0]}_{ids.upper()}_{interaction[0]}_{interaction[2]}' not in ref_set:
-                print('skip', f'{ids.upper()}_{interaction[0]}_{interaction[2]}_{ids.upper()}_{interaction[2]}_{interaction[0]}',list(ref_set)[0])
-                continue
+            #if ref_set and f'{ids.upper()}_{interaction[0]}_{interaction[2]}_{ids.upper()}_{interaction[2]}_{interaction[0]}' not in ref_set 
+            #and f'{ids.upper()}_{interaction[2]}_{interaction[0]}_{ids.upper()}_{interaction[0]}_{interaction[2]}' not in ref_set:
+            #    print('skip', f'{ids.upper()}_{interaction[0]}_{interaction[2]}_{ids.upper()}_{interaction[2]}_{interaction[0]}',list(ref_set)[0])
+            #    continue
 
             
             local_domains = [domains[C] for C in interaction.split('-')]
@@ -601,7 +601,6 @@ def randomProteinSampler(df_HET, df_HOM, domain_mode, N_SAMPLE_LIMIT,match_parti
             yielded_samples += 1
         return
 
-    ##elif domain_mode =='random'
     else:
         for pairing in zip(choice(heteromer_set,N_SAMPLE_LIMIT,True),choice(homodimer_set,N_SAMPLE_LIMIT,True)):
             yield pairing
@@ -615,89 +614,79 @@ def chainMap():
             chainmap[pdb][file_chain] = pdb_chain
     return dict(chainmap)
 
+def paralleliseAlignment(pdb_pairs,file_name):
+    data_columns = ['id','code','pval_F','pval_S','pval_T','pval_F2','pval_S2','pval_T2','hits','similarity','score','align_length','overlap']
+
+    with Pool() as pool, open(f'{file_name}_comparison.csv','w', newline='') as csvfile:
+        f_writer = csv.writer(csvfile)
+        f_writer.writerow(data_columns)
+
+        for ((key,code),p_value) in pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50):
+            if p_value != 'error':
+                f_writer.writerow(['{0}_{1}_{4}_{2}_{3}_{5}'.format(*key),code]+[f'{n:.2e}' if isinstance(n,float) else str(n) for n in p_value])
+
+def getDataset(heteromeric=True,filter=100):
+    if not os.path.isfile(f'{"Heteromeric" if heteromeric else "Homomeric"}_complexes_{filter}.csv'):
+        makeDatasets(threshold=args.filter_level,use_identical_subunits=True,relabel=True)
+    return loadCSV(f'{"Heteromeric" if heteromeric else "Homomeric"}_complexes_{filter}.csv')
 
 def main(args):
 
-    assert args.filter_level in {50,70,90,100}, 'Invalid filter level'
+    if args.filter_level not in {50,70,90,100}:
+        print('Invalid filter level')
+        return False
+
     if args.filter_level == 100:
         args.filter_level = 'unfiltered'
-    
-    df = loadCSV(f'Heteromers_{args.filter_level}.csv')
-    df2 = loadCSV(f'Homomers_{args.filter_level}.csv')
 
+    heteromeric_data = getDataset(True,args.filter_level)
 
-    if args.exec_mode == 'match':
-        proteinGenerator = sharedMatchingAlgorithm2(df,df2)
-        if args.N_samples:
-            proteinGenerator = [proteinGenerator[index] for index in choice(len(proteinGenerator),replace=False,size=args.N_samples)]
-        #if args.N_samples is None:
-        #    print('Exhaustive iterating domain matched comparisons')
-        #    proteinGenerator = newFPS(df,df2,args.allow_partials)
-        #else:
-        #    print('Sampling domain matched comparisons')
-        #    proteinGenerator = RPS_wrapper(df,df2,args.N_samples,args.allow_partials)
-    elif args.exec_mode == 'intra':
-        proteinGenerator = sharedMatchingAlgorithm3(df)
+    if args.exec_mode == 'heteromeric':
+        comparison_generator = heteromericInteractionRunner(heteromeric_data)
+    elif args.exec_mode == 'precusor':
+        homomeric_data = getDataset(False,args.filter_level)
+        comparison_generator = precusorInteractionRunner(heteromeric_data,homomeric_data)
     else:
-        print('Sampling anti-domain enforced comparisons')
-        proteinGenerator = EPS_wrapper(df,df2,args.N_samples)
+        print('Unknown comparison type')
+        return False     
         
-    if args.exec_style:
-        results = paralleliseAlignment(proteinGenerator,args.file_name)
+    print('Running in parallel')
+    paralleliseAlignment(proteinGenerator,args.file_name)
+    return
+    if True:
+        pass
     else:
         print('Running sequentially')
-        results = []
+
         for pdb in proteinGenerator:
-            try:
-                single_result = calculatePvalue(pdb)
-                os.remove('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*single_result[0]))
-            except Exception as err:
-                print('Error on {}'.format(pdb),err)
-            
+            single_result = calculatePvalue(pdb)
+            if single_result != 'error':
+                results.append((single_result[0],)+single_result[1])
 
-            results.append((single_result[0],)+single_result[1])
-  
-
-    if args.json:
-        with open('{}_{}_comparison.dict'.format('Table' if args.exec_source else 'PDB',
-            args.file_name or ('domain_match' if args.exec_mode else 'random')),'w') as f_out:
-            json.dump(results,f_out)
-    else:
 
         columns = ['id','code','pval_F','pval_S','pval_T','pval_F2','pval_S2','pval_T2','hits','similarity','score','align_length','overlap']
         df = pandas.DataFrame(results)
         df.columns = columns
         
         with open(f'/rscratch/asl47/PDB_results/{args.file_name}_comparison.csv','w') as f_out:
-            
-            df.to_csv(f_out,index=False,columns=columns)
-
-        
+            df.to_csv(f_out,index=False,columns=columns)        
         
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'Domain comparison suite')
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument("-P", "--parallel", action="store_true",dest='exec_style')
-    group.add_argument("-S", "--sequential", action="store_false",dest='exec_style')
-
-    group3 = parser.add_mutually_exclusive_group()
-    group3.add_argument("-T", "--table", action="store_true",dest='exec_source')
-    group3.add_argument("-H", "--heterodimers", action="store_false",dest='exec_source')
     
-    group2 = parser.add_mutually_exclusive_group()
-    group2.add_argument("-D", "--domain", action="store_const",dest='exec_mode',const='match')
-    group2.add_argument("-R", "--random", action="store_const",dest='exec_mode',const='random')
-    group2.add_argument('-I','--intra', action='store_const',dest='exec_mode',const='intra')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("-H", "--heteromeric", action="store_const",dest='exec_mode',const='heteromeric')
+    group.add_argument("-P", "--precursor", action="store_const",dest='exec_mode',const='precusor')
 
-    #parser.add_argument('--R_mode', type=int,dest='R_mode')
     parser.add_argument('--json', type=bool,dest='json')
     parser.add_argument('--filter', type=int,dest='filter_level')
     parser.add_argument('-N','--N_samples', type=int,dest='N_samples')
     parser.add_argument('--file_name', type=str,dest='file_name')
-    parser.add_argument('--partial', action='store_true',dest='allow_partials')
-    parser.set_defaults(exec_style=False,exec_mode=None,exec_source=True,N_samples=None,file_name=None,allow_partials=False,json=False,filter_level=50)
+
+    parser.set_defaults(exec_mode='heteromeric',file_name=None,filter_level=100)
 
     args = parser.parse_args()
+    main(args)
 
     if not args.exec_mode:
         print('Defaulting to random alignment')

@@ -1,4 +1,4 @@
-from SuBSeA import pisa_XML, domains, SubSeA, utility
+from SuBSeA import pisa_XML, domains, binding_alignment, utility
 import os
 
 def test_all_FASTA_download(capsys):
@@ -27,8 +27,8 @@ def test_pull_domains(capsys):
 def test_pull_fasta(capsys):
     print('Starting FASTA pulling test, stdout is enabled')
     with capsys.disabled():
-        assert SubSeA.pullFASTA('1A1S','A')
-        assert SubSeA.pullFASTA('4WTO','C')
+        assert binding_alignment.pullFASTA('1A1S','A')
+        assert binding_alignment.pullFASTA('4WTO','C')
     print('Cleaning out generated files')
     for temp_file in ('1A1S_A','4WTO_C'):
         os.remove(f'{temp_file}.fasta.txt')

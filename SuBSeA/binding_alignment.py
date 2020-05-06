@@ -2,12 +2,11 @@
 
 import os
 
-from pisa_XML import pullXML
-
 from collections import defaultdict
 from operator import itemgetter
 from time import sleep
 import argparse
+import contextlib
 
 import subprocess
 import numpy as np
@@ -16,8 +15,6 @@ import scipy.stats
 import scipy.special
 import requests
 import csv
-
-from multiprocessing import Pool,Manager
 
 BASE_PATH, FASTA_PATH, INT_PATH, PALIGN_PATH, NEEDLE_PATH = '', '', '', '', ''
 needle_exec = ''
@@ -284,59 +281,41 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
         len(alignment_scores),similarity,score,needle_length,noverlap)
 
 
-def calculatePvalue(pdb_combination,WI_=False):
+def calculatePvalue(pdb_combination,WI_=False,remove_files=False):
     (het,hom,code) = pdb_combination
-    args=(het[:4].upper(),het[5],hom[:4].upper(),hom[5],het[7],hom[7])
+    args = (het[:4].upper(),het[5],hom[:4].upper(),hom[5],het[7],hom[7])
+    
     try:
         n_r, m_r = generateAssistiveFiles(args,write_intermediates=WI_)
-        return ((args,code),MatAlign(*args[:4],needle_result=n_r,matrix_result=m_r))
+        p_value = MatAlign(*args[:4],needle_result=n_r,matrix_result=m_r)
     except Exception as e:
         print(het,hom,'!!Error!!:\t',e)
-        return ((args,code), 'error')
+        p_value = 'error'
+    
+    if remove_files:
+        cleanGeneratedFiles(*args[:4])
 
+    return ((args,code),p_value)
 
-def paralleliseAlignment(pdb_pairs,file_name):
-    print('Parellelising alignment')
-
-    columns = ['id','code','pval_F','pval_S','pval_T','pval_F2','pval_S2','pval_T2','hits','similarity','score','align_length','overlap']
-
-    results = Manager().list()
-    with Pool() as pool, open(f'/rscratch/asl47/PDB_results/{file_name}_comparison.csv','w', newline='') as csvfile:
-        f_writer = csv.writer(csvfile)
-        f_writer.writerow(columns)
-        for progress, ((key,code),p_value) in enumerate(pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50)):
-            #try:
-            #    if os.path.exists('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key)):
-            #         pass
-            #         #os.remove('/scratch/asl47/PDB/NEEDLE/{}_{}_{}_{}.needle'.format(*key))
-            #except FileNotFoundError:
-            #    print('File removal error')
-
-            #results['{}_{}_{}_{}'.format(*key)]=p_value
-            if p_value != 'error':
-                f_writer.writerow(['{0}_{1}_{4}_{2}_{3}_{5}'.format(*key),code]+[f'{n:.2e}' if isinstance(n,float) else str(n) for n in p_value])
-
-                #results.append(('{}_{}_{}_{}'.format(*key),code)+p_value)
-            if progress and progress % 50000 == 0:
-                print(f'done another 50k ({progress})')
-
-    print('Finished parallel mapping')
-    return list(results)
+def cleanGeneratedFiles(subunit_1,chain_1,subunit_2,chain_2):
+    with contextlib.suppress(FileNotFoundError):
+        for ext in ('int','xml'):
+            os.remove(f'{BASE_PATH}{INT_PATH}{subunit_1}.{ext}')
+        os.remove(f'{BASE_PATH}{NEEDLE_PATH}{subunit_1}_{chain_1}_{subunit_2}_{chain_2}.needle')
+        os.remove(f'{BASE_PATH}{FASTA_PATH}{subunit_1}_{chain_1}.fasta.txt')
+        os.remove(f'{BASE_PATH}{FASTA_PATH}{subunit_2}_{chain_2}.fasta.txt')
 
 def main(args):
-    
+    from pisa_XML import pullXML
+    ##download relevant files for comparison
     pullXML([args.subunit_1,args.subunit_2])
+    ##set environmental variable for needle, if not properly set already
     os.environ['EMBOSS_ACDROOT'] = os.getcwd()
 
     alt_chain_1, alt_chain_2 = args.alternate_chains or (args.chain_2,args.chain_1)
 
-    print(calculatePvalue([f'{args.subunit_1}_{args.chain_1}_{alt_chain_1}',f'{args.subunit_2}_{args.chain_2}_{alt_chain_2}','ignore'])[1])
+    print(calculatePvalue([f'{args.subunit_1}_{args.chain_1}_{alt_chain_1}',f'{args.subunit_2}_{args.chain_2}_{alt_chain_2}','ignore'],remove_files=True)[1])
 
-    for ext in ('int','xml'):
-        os.remove(f'{args.subunit_1}.{ext}')
-    os.remove(f'{args.subunit_1}_{args.chain_1}_{args.subunit_2}_{args.chain_2}.needle')
-    os.remove(f'{args.subunit_1}_{args.chain_1}.fasta.txt')
-    os.remove(f'{args.subunit_2}_{args.chain_2}.fasta.txt')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'SuBSeA')

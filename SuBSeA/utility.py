@@ -8,7 +8,7 @@ import ast
 
 import pandas
 from statistics import mean
-from SuBSeA.domains import readDomains, invertDomains, pullDomains
+from domains import readDomains, invertDomains, pullDomains
 
 VALID_THRESHOLDS = {30,40,50,60,70,80,90,95,100}
 
@@ -66,9 +66,7 @@ def loadCSV(fname):
         else:
             row['domains'] = {dom.split(':')[0]:ast.literal_eval(dom.split(':')[1]) for dom in row['domains'].split(';') if len(dom)>1}
             
-
         row['BSAs'] = ast.literal_eval(row['BSAs'])
-        #df.iloc[index] = row
         rr.append(row)
         
     return pandas.DataFrame(rr)

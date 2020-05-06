@@ -6,7 +6,21 @@
 
 Software to test qualitative hypotheses generated from the [polyomino evolution through duplication study](https://github.com/ASLeonard/duplication "Polyomino duplication repository").
 
-This program compares the binding residues from macromolecular interfaces with optimal sequence alignment to estimate the likelihood that two protein complex interactions are related.
+This program compares the binding residues from macromolecular interfaces with optimal sequence alignment to estimate the likelihood that two protein complex interactions are related. A more detailed description of the analysis can be found in the methods [here](https://www.biorxiv.org/content/10.1101/2020.04.22.054783v1).
+
+### Components
+There are several main components to the analysis pipeline, outlined below.
+
+- Protein complex dataset generation
+ - utility.py
+- Bioinformatic data pulling
+ - domains.py
+ - pisa_XML.py
+- SuBSeA analysis
+ - periodic.py
+ - SuBSeA.py
+- Visualisation
+ - pdb_visualisation.py
 
 ## Install
 
@@ -17,24 +31,35 @@ In addition, a working version of needle from [Emboss](http://emboss.sourceforge
 ### Testing
 
 Functionality can be tested by running the following command.
-```
+```shell
 python -m pytest
 ```
+Errors at this stage are likely due to a missing needle exectuable or required python packages.
 
-## Examples
-A simple example can be run through
+## Usage examples 
+A simple example can be run by providing the two subunits to compare.
 ```python
 python SubSeA.py 3WJM A 3WJM B
 ```
-which calculates the SuBSeA confidence between the two heteromeric interfaces of the protein complex 3WJM.
+Which calculates the SuBSeA confidence between the two heteromeric interfaces of the protein complex 3WJM.
 
 If the interaction under examination is not isologous, alternate chains can be provided for comparison.
 ```python
 python SubSeA.py 2IX2 A 2IX2 B --alternate_chains C A
 ```
-which runs the comparison of the interactions between chains A->C with the interaction between chains B->A.
+Which runs the comparison of the interactions between chains A->C with the interaction between chains B->A.
 
-## Scope
+Interfaces can also be compared across subunits, such as analysing homomeric precursors.
+```python
+python SubSeA.py 15C8 L 4OFD A --alternate_chains H B
+```
+Again which compared the interaction between 15C8 chains L->H and 4ODF chains A->B.
 
-### Limitations
-Not all protein complexes are stored in standard formats. Particularly there are often conflicts between the PDB and PDBePISA with regards to quaternary structure and active interactions. When there are issues in compatability, it is often the case that certain interactions are calculated incorrectly, which can provide a meaningless result with no alignment.
+## Limitations
+Not all protein complexes are stored in standard formats. Particularly, there are often conflicts between the PDB and PDBePISA with regards to quaternary structure and active interactions. When there are issues in compatability, it is often the case that certain interactions are calculated incorrectly, which can provide a meaningless result with no alignment.
+
+The full analysis requires
+- FASTA sequence
+- PDBePISA macromolecular interfaces
+- CATH domains (or other homology identifier)
+Any protein complex with incomplete data will struggle in this analysis, so only a subset of recorded proteins can be used correctly.

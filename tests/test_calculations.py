@@ -33,15 +33,14 @@ def test_SuBSeA(capsys):
         print('Setting EMBOSS_ACDROOT variable to current directory')
         os.environ['EMBOSS_ACDROOT'] = os.getcwd()
         print('running calc')
-        assert (binding_alignment.calculatePvalue(('1A00_C_D','1A00_D_C','MUT'),WI_=False)[1] != 'error'), 'Didn\'t work'
+        assert (binding_alignment.calculatePvalue(('1A00_C_D','1A00_D_C','MUT'),WI_=False,remove_files=True)[1] != 'error'), 'Didn\'t work'
         print('With writing intermediate files')
-        assert (binding_alignment.calculatePvalue(('1BND_A_B','1BND_B_A','MUT'),WI_=True)[1] != 'error'), 'Didn\'t work'
+        assert (binding_alignment.calculatePvalue(('1BND_A_B','1BND_B_A','MUT'),WI_=True,remove_files=True)[1] != 'error'), 'Didn\'t work'
         print('calculations over, now cleaning files')
-    ##clean up
 
-    for ext_n in ('needle','pmatrix','pialign'):
+    ##clean up
+    for ext_n in ('pmatrix','pialign'):
         os.remove(f'1BND_A_1BND_B.{ext_n}')
-    os.remove('1A00_C_1A00_D.needle')
 
     with capsys.disabled():
         print('Test complete!\n')

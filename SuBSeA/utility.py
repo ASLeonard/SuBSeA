@@ -8,7 +8,7 @@ import ast
 
 import pandas
 from statistics import mean
-from domains import readDomains, invertDomains, pullDomains
+from .domains import readDomains, invertDomains, pullDomains
 
 VALID_THRESHOLDS = {30,40,50,60,70,80,90,95,100}
 
@@ -163,7 +163,6 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
     domain_dict, chain_map_full = loadAssistiveFiles(relabel)
     
     new_rows = []
-
 
     for data in data_heteromers.values():
         for row_index, row in data.iterrows():

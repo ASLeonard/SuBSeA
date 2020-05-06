@@ -7,8 +7,8 @@ import numpy as np
 from itertools import product
 
 from scipy.stats import expon,linregress,ks_2samp,anderson_ksamp,mannwhitneyu,epps_singleton_2samp,brunnermunzel,pearsonr,spearmanr
-from SuBSeA.utility import loadCSV
-from SuBSeA.domains import readDomains, duplicateIntersection
+from .utility import loadCSV
+from .domains import readDomains, duplicateIntersection
 
 from matplotlib.colors import Normalize
  

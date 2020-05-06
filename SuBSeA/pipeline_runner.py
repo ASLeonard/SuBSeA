@@ -1,10 +1,9 @@
 ##local imports
-from domains import readDomains
-from binding_alignment import calculatePvalue
-from utility import loadCSV, invertCSVDomains, makeDatasets
+from .domains import readDomains
+from .binding_alignment import calculatePvalue
+from .utility import loadCSV, invertCSVDomains, makeDatasets, VALID_CLUSTERS
 
 ##global imports
-import pandas
 from numpy.random import  choice
 from collections import defaultdict
 import os
@@ -14,13 +13,10 @@ import argparse
 import numpy as np
 from itertools import product
 
-import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
-from matplotlib.cm import ScalarMappable
 
-from scipy.stats import spearmanr, fisher_exact
+from scipy.stats import fisher_exact
 
-from multiprocessing import Pool,Manager
+from multiprocessing import Pool
 
 def heteromericInteractionRunner(df_het):
     comparisons_to_make = []
@@ -106,41 +102,9 @@ def newFPS(df_HET, df_HOM,match_partials=False):
                 continue
             yield (chain_HET,chain_HOM)
 
-##dead
-
-def domainSubunitRewire(df):
-
-    interaction_edges = []
-
-    for _,row in df.iterrows():
-        domains = row['domains']
-        interactions = row['interfaces']
-        for interaction in interactions:
-            interaction_edges.extend([domains[C] for C in interaction.split('-')])
-    print(len(interaction_edges))
-    
-    
-    #chi2_contingency(obs, lambda_="log-likelihood")
-    return 'dead'
 
 
-def conv(dq):
-    a=[]
-    for _,row in dq.iterrows():
-        for unit in row['interfaces'].split('-'):
-            if unit not in row['domains']:
-                continue
-        #try:
-        #    domains = {K[0]:K[2:] for K in row['domains'].split(';')}
-        #except:
-        #    continue
-    
-        a.append({'PDB_id':row['PDB_id'],'interfaces':[row['interfaces']],'domains':row['domains'],'BSAs':{row['interfaces']:row['BSAs']}})
-
-    return pandas.DataFrame(a)
-
-
-                    
+                  
                     
 
 def sharedMatchingAlgorithm2(df_HET, df_HOM):
@@ -393,58 +357,6 @@ def domainPairStatistics(df,df_HOM,ref_set=None):
 
 
 
-def plotStatRel(data_in):
-    data = data_in.copy()
-    data[:,0]+=data[:,1]
-
-    plt.figure()
-    plt.scatter(data[:,0],data[:,2],c=data[:,3],cmap='viridis',norm=LogNorm())
-    max_D = np.max((data[:,0].max(),data[:,2].max()))
-    plt.plot([0,max_D],[0,max_D],'r--')
-
-    #lowers = np.where(data[:,0]<data[:,2])[0]
-    #highers = np.where(data[:,0]>data[:,2])[0]
-
-    #delta_up = np.sum(data[highers,3])/np.sqrt(2)
-    #delta_down = np.sum(data[lowers,3])/np.sqrt(2)
-    #print(delta_up,delta_down)
-
-    #print(data[highers,3])
-    #print(data[lowers,3])
-    
-    f,ax=plt.subplots()
-
-    data_src = np.array(sorted([(i[3],i[0]-i[2],i[0]+i[2]) for i in data],reverse=True))
-
-    markers = ['d' if delta > 0 else ('o' if delta==0 else 's') for delta in data_src[:,1]]
-
-    LN = LogNorm(1,max(data_src[:,2])*2)
-    CV = plt.get_cmap('viridis')
-    data_scaled = [.1+np.log10(XX) if XX>0 else (-.1-np.log10(-XX) if XX<0 else 0) for XX in data_src[:,1]]
-
-    ax.axhline(.1,ls='--')
-    ax.axhline(-.1,ls='--')
-    
-    #return data_src
-    for i, (Y,c,m) in enumerate(zip(data_scaled,data_src[:,2],markers)):
-
-        plt.plot([i],[Y],marker=m,mec=CV(LN(c)) if c>0 else 'k',ms=10,mfc='None',mew=3)#,cmap='viridis')#,c=c,marker=m,cmap='viridis',norm=LN)
-
-    #slope, inter = linregress(range(len(data_scaled)),data_scaled)[:2]
-    #plt.plot(range(len(data_scaled)),[slope*rank+inter for rank in range(len(data_scaled))],'r--')
-    print(spearmanr(range(len(data_scaled)),data_src[:,1]))
-   
-    #plt.scatter(range(len(data_src)),data_src[:,1],c=data_src[:,0],cmap='viridis',norm=LogNorm(),marker=markers)
-    scalar_map =ScalarMappable(norm=LogNorm(1,max(data_src[:,2])*2),cmap='viridis')
-    scalar_map.set_array(data_src[:,2])
-    f.colorbar(scalar_map,ax=ax)
-    plt.yticks([-2.1,-1.1,-.1,0,.1,1.1,2.1,3.1],['100','10','1','0','1','10','100','1000'])
-    ax.tick_params(direction='out', length=6, width=2)
-    plt.show(0)
-    #df = pandas.DataFrame(data_src,columns=['Hom','Het'])
-    #return df
-
-
 def heteromericOverlapStats(df,df2):
     homomeric_domains = set()
 
@@ -632,12 +544,9 @@ def getDataset(heteromeric=True,filter=100):
 
 def main(args):
 
-    if args.filter_level not in {50,70,90,100}:
+    if args.filter_level not in VALID_CLUSTERS:
         print('Invalid filter level')
         return False
-
-    if args.filter_level == 100:
-        args.filter_level = 'unfiltered'
 
     heteromeric_data = getDataset(True,args.filter_level)
 
@@ -653,23 +562,7 @@ def main(args):
     print('Running in parallel')
     paralleliseAlignment(proteinGenerator,args.file_name)
     return
-    if True:
-        pass
-    else:
-        print('Running sequentially')
-
-        for pdb in proteinGenerator:
-            single_result = calculatePvalue(pdb)
-            if single_result != 'error':
-                results.append((single_result[0],)+single_result[1])
-
-
-        columns = ['id','code','pval_F','pval_S','pval_T','pval_F2','pval_S2','pval_T2','hits','similarity','score','align_length','overlap']
-        df = pandas.DataFrame(results)
-        df.columns = columns
-        
-        with open(f'/rscratch/asl47/PDB_results/{args.file_name}_comparison.csv','w') as f_out:
-            df.to_csv(f_out,index=False,columns=columns)        
+   
         
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'Domain comparison suite')
@@ -678,22 +571,10 @@ if __name__ == "__main__":
     group.add_argument("-H", "--heteromeric", action="store_const",dest='exec_mode',const='heteromeric')
     group.add_argument("-P", "--precursor", action="store_const",dest='exec_mode',const='precusor')
 
-    parser.add_argument('--json', type=bool,dest='json')
     parser.add_argument('--filter', type=int,dest='filter_level')
-    parser.add_argument('-N','--N_samples', type=int,dest='N_samples')
     parser.add_argument('--file_name', type=str,dest='file_name')
 
     parser.set_defaults(exec_mode='heteromeric',file_name=None,filter_level=100)
 
     args = parser.parse_args()
-    main(args)
-
-    if not args.exec_mode:
-        print('Defaulting to random alignment')
-        args.exec_mode = 'random'
-
-    if args.exec_mode != 'match' and not args.N_samples:
-        print('Random sampling amount defaulted to 10,000')
-        args.N_samples = 10000
-
     main(args)

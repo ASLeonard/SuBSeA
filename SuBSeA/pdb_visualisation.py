@@ -6,7 +6,7 @@ from collections import defaultdict
 import numpy as np
 from itertools import product
 
-from scipy.stats import expon,linregress,ks_2samp,anderson_ksamp,mannwhitneyu,epps_singleton_2samp,brunnermunzel,pearsonr,spearmanr
+from scipy.stats import expon,linregress,ks_2samp,anderson_ksamp,mannwhitneyu,epps_singleton_2samp,brunnermunzel,spearmanr
 from SuBSeA.utility import loadCSV
 from SuBSeA.domains import readDomains, duplicateIntersection
 
@@ -307,7 +307,7 @@ def plotNormOVR(df,sigma=-np.log10(.05),x_var='norm_OVR',stat_func=brunnermunzel
         print(f'\t  Positive mean: {np.mean(positive_group[x_var]):.2f} ({np.std(positive_group[x_var]):.2f})')
         print(f'\t  Negative mean: {np.mean(negative_group[x_var]):.2f} ({np.std(negative_group[x_var]):.2f})')
         #print(commonLanguageES(negative_group[x_var],positive_group[x_var]))
-    
+
     sns.violinplot('code',x_var,data=df,hue='sig',cut=0,orient='v',inner='quartile',scale_hue=True,scale='area',split=True)
     plt.show(0)
 

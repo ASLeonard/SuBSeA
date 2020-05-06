@@ -14,7 +14,6 @@ import numpy as np
 import scipy.stats
 import scipy.special
 import requests
-import csv
 
 BASE_PATH, FASTA_PATH, INT_PATH, PALIGN_PATH, NEEDLE_PATH = '', '', '', '', ''
 needle_exec = ''
@@ -291,7 +290,7 @@ def calculatePvalue(pdb_combination,WI_=False,remove_files=False):
     except Exception as e:
         print(het,hom,'!!Error!!:\t',e)
         p_value = 'error'
-    
+
     if remove_files:
         cleanGeneratedFiles(*args[:4],remove_files=='full')
 
@@ -300,8 +299,7 @@ def calculatePvalue(pdb_combination,WI_=False,remove_files=False):
 def cleanGeneratedFiles(subunit_1,chain_1,subunit_2,chain_2,full_clean=False):
     with contextlib.suppress(FileNotFoundError):
         if full_clean:
-            for ext in ('int','xml'):
-                os.remove(f'{BASE_PATH}{INT_PATH}{subunit_1}.{ext}')
+            os.remove(f'{BASE_PATH}{INT_PATH}{subunit_1}.int')
         os.remove(f'{BASE_PATH}{NEEDLE_PATH}{subunit_1}_{chain_1}_{subunit_2}_{chain_2}.needle')
         os.remove(f'{BASE_PATH}{FASTA_PATH}{subunit_1}_{chain_1}.fasta.txt')
         os.remove(f'{BASE_PATH}{FASTA_PATH}{subunit_2}_{chain_2}.fasta.txt')
@@ -316,7 +314,6 @@ def main(args):
     alt_chain_1, alt_chain_2 = args.alternate_chains or (args.chain_2,args.chain_1)
 
     print(calculatePvalue([f'{args.subunit_1}_{args.chain_1}_{alt_chain_1}',f'{args.subunit_2}_{args.chain_2}_{alt_chain_2}','ignore'],remove_files='full')[1])
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'SuBSeA')

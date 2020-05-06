@@ -234,7 +234,6 @@ def getUniqueInteractions(row,used_cluster_interactions,redundant_pdbs,homomeric
                 if f'{row["PDB_id"].upper()}_{chain}' in cluster:
                     cluster_indexes.append(index)
                     break
-                
         cluster_indexes = tuple(cluster_indexes)
         if homomeric_mode and cluster_indexes[0]!=cluster_indexes[1]:
             print('Error, cannot be homomeric interaction but different clusters', row['PDB_id'], interaction_pair)

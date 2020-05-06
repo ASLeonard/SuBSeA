@@ -1,7 +1,7 @@
 import sys, os
 sys.path.append('SuBSeA')
 
-from SuBSeA import pisa_XML, domains, binding_alignment, utility, pdb_visualisation
+from SuBSeA import pisa_XML, domains, binding_alignment, utility
 
 def test_all_FASTA_download(capsys):
     with capsys.disabled():

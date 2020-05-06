@@ -51,7 +51,7 @@ def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
         ##see if fasta info is in given file
         try:
             with open(f'{BASE_PATH}{FASTA_PATH}{pdb}_{chain}.fasta.txt','w') as fasta_file:
-                subprocess.run(['grep', '-i','-A1',f'{pdb}_{chain}', f'{BASE_PATH}{FASTA_PATH}minimal_all_fasta.txt'],check=True,stdout=fasta_file)
+                subprocess.run(['grep', '-i','-A1',f'{pdb}_{chain}', f'{BASE_PATH}{FASTA_PATH}minimal_all_fasta.txt'],check=True,stdout=fasta_file,stderr=subprocess.DEVNULL)
                 
         except subprocess.CalledProcessError as e:
             ##could not find FASTA data in all_fasta file, try downloading
@@ -59,7 +59,7 @@ def needleAlign(pdb_1,chain_1,pdb_2,chain_2,needle_EXEC='./needle'):
             if not pullFASTA(pdb,chain):
                 raise ValueError(f'Chain does not seem to exist for {pdb}_{chain}')
     
-    print('about to run needle')
+    print('Running needle')
     try:
         subprocess.run([f'{needle_EXEC}', f'{BASE_PATH}{FASTA_PATH}{pdb_1}_{chain_1}.fasta.txt', f'{BASE_PATH}{FASTA_PATH}{pdb_2}_{chain_2}.fasta.txt',
             '-auto', '-outfile', f'{BASE_PATH}{NEEDLE_PATH}{pdb_1}_{chain_1}_{pdb_2}_{chain_2}.needle'],check=True)
@@ -293,14 +293,15 @@ def calculatePvalue(pdb_combination,WI_=False,remove_files=False):
         p_value = 'error'
     
     if remove_files:
-        cleanGeneratedFiles(*args[:4])
+        cleanGeneratedFiles(*args[:4],remove_files=='full')
 
     return ((args,code),p_value)
 
-def cleanGeneratedFiles(subunit_1,chain_1,subunit_2,chain_2):
+def cleanGeneratedFiles(subunit_1,chain_1,subunit_2,chain_2,full_clean=False):
     with contextlib.suppress(FileNotFoundError):
-        for ext in ('int','xml'):
-            os.remove(f'{BASE_PATH}{INT_PATH}{subunit_1}.{ext}')
+        if full_clean:
+            for ext in ('int','xml'):
+                os.remove(f'{BASE_PATH}{INT_PATH}{subunit_1}.{ext}')
         os.remove(f'{BASE_PATH}{NEEDLE_PATH}{subunit_1}_{chain_1}_{subunit_2}_{chain_2}.needle')
         os.remove(f'{BASE_PATH}{FASTA_PATH}{subunit_1}_{chain_1}.fasta.txt')
         os.remove(f'{BASE_PATH}{FASTA_PATH}{subunit_2}_{chain_2}.fasta.txt')
@@ -314,7 +315,7 @@ def main(args):
 
     alt_chain_1, alt_chain_2 = args.alternate_chains or (args.chain_2,args.chain_1)
 
-    print(calculatePvalue([f'{args.subunit_1}_{args.chain_1}_{alt_chain_1}',f'{args.subunit_2}_{args.chain_2}_{alt_chain_2}','ignore'],remove_files=True)[1])
+    print(calculatePvalue([f'{args.subunit_1}_{args.chain_1}_{alt_chain_1}',f'{args.subunit_2}_{args.chain_2}_{alt_chain_2}','ignore'],remove_files='full')[1])
 
 
 if __name__ == "__main__":

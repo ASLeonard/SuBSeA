@@ -144,6 +144,7 @@ def parseXML(xml_list):
                         int_file.write(f'{chain}\t{res_seq}\t{res_name}\t' + '\t'.join(inter[chain][res_seq])+'\n')
         else:
             print(f'PDB entry {pdb_entry} status was not okay')
+        os.remove(f'{BASE_PATH}{INT_PATH}{pdb_entry}.xml')
 
 def main(args):
 

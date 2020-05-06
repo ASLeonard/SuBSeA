@@ -9,5 +9,9 @@ __pycache__/
 *csv
 *txt
 
+**csv
+**json
+**xlsx
+
 */*~
 */*#

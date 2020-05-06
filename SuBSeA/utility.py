@@ -8,9 +8,9 @@ import ast
 
 import pandas
 from statistics import mean
-from .domains import readDomains, invertDomains, pullDomains
+from domains import readDomains, invertDomains, pullDomains
 
-VALID_THRESHOLDS = {30,40,50,60,70,80,90,95,100}
+VALID_CLUSTERS = {30,40,50,60,70,80,90,95,100}
 
 ##download file and then clean overall method
 def downloadAllFASTA_GZ(fpath=''):
@@ -102,8 +102,11 @@ def makeDatasets(fpath='',heteromeric=True, threshold=100,use_identical_subunits
         downloadPeriodicData(fpath)
 
     data = mergeSheets(fpath,heteromeric,use_identical_subunits,relabel,DEBUG_ignore_domains)
-    post_filter = filterDataset(data,threshold)
+    print('Data has been merged, filtering now...')
+    
+    post_filter = filterDataset(data,threshold) if threshold != 100 else data
     writeCSV(post_filter,('Heteromeric' if heteromeric else 'Homomeric')+f'_complexes_{threshold}.csv')
+    print('Dataset written successfully')
 
 def loadAssistiveFiles(relabel):
     try:
@@ -163,6 +166,7 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
     domain_dict, chain_map_full = loadAssistiveFiles(relabel)
     
     new_rows = []
+    pulled_new_domains = False
 
     for data in data_heteromers.values():
         for row_index, row in data.iterrows():
@@ -198,6 +202,7 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
 
                 if PDB_code not in domain_dict:
                     print('pulling for ',PDB_code)
+                    pulled_new_domains = True
                     domain_dict[PDB_code] = pullDomains(PDB_code)
                 
                 domain_info = makeFormattedDomainInformation(meaningful_interfaces,domain_dict[PDB_code])
@@ -207,7 +212,7 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
                 new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info,
                     'BSAs': {K:BSA_av[K] for K in meaningful_interfaces}})
 
-    if not DEBUG_ignore_domains:
+    if not DEBUG_ignore_domains and pulled_new_domains:
         with open('domain_architectures_periodic.json', 'w') as file_out:
             file_out.write(json.dumps(domain_dict))
 
@@ -215,7 +220,7 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
 
 ## Download pre-made PDB clusters for protein subunits
 def downloadClusters(threshold):
-    assert threshold in VALID_THRESHOLDS, 'Invalid cluster threshold'
+    assert threshold in VALID_CLUSTERS, 'Invalid cluster threshold'
     print(f'Downloading PDB clustering @ {threshold}')
     urllib.request.urlretrieve(f'ftp://resources.rcsb.org/sequence/clusters/bc-{threshold}.out', f'PDB_clusters_{threshold}.txt')
     print(f'Download successful')
@@ -242,7 +247,7 @@ def getUniqueInteractions(row,used_cluster_interactions,redundant_pdbs,homomeric
 
 ## Filter dataset at a specific redundancy level
 def filterDataset(df,thresh,homomeric_mode=False):
-    assert thresh in VALID_THRESHOLDS, f'Not implemented for threshold value: {thresh}'
+    assert thresh in VALID_CLUSTERS, f'Not implemented for threshold value: {thresh}'
 
     cluster_file_path = f'PDB_clusters_{thresh}.txt'
 

@@ -1,5 +1,7 @@
-from SuBSeA import pisa_XML, domains, binding_alignment, utility
-import os
+import sys, os
+sys.path.append('SuBSeA')
+
+from SuBSeA import pisa_XML, domains, binding_alignment, utility, pdb_visualisation
 
 def test_all_FASTA_download(capsys):
     with capsys.disabled():
@@ -11,9 +13,8 @@ def test_pull_XML(capsys):
     with capsys.disabled():
         assert pisa_XML.pullXML(('4P69','1AI2','4WTO','1A1S','2PEY'))
     print('Cleaning out generated files')
-    for ext_n in ('xml','int'):
-        for temp_file in ('4P69','1AI2','4WTO','1A1S','2PEY'):
-            os.remove(f'{temp_file}.{ext_n}')
+    for temp_file in ('4P69','1AI2','4WTO','1A1S','2PEY'):
+        os.remove(f'{temp_file}.int')
     print('Test complete!\n')
 
 def test_pull_domains(capsys):

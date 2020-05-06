@@ -1,13 +1,17 @@
 ##local imports
-from .domains import readDomains
-from .binding_alignment import calculatePvalue
-from .utility import loadCSV, invertCSVDomains, makeDatasets, VALID_CLUSTERS
+import sys
+print(sys.path)
+from domains import readDomains, duplicateIntersection
+from binding_alignment import calculatePvalue
+from utility import loadCSV, invertCSVDomains, makeDatasets, VALID_CLUSTERS
+from pisa_XML import pullXML
 
 ##global imports
-from numpy.random import  choice
+from numpy.random import choice
 from collections import defaultdict
+from functools import partial
 import os
-import json
+import csv
 import argparse
 
 import numpy as np
@@ -19,7 +23,7 @@ from scipy.stats import fisher_exact
 from multiprocessing import Pool
 
 def heteromericInteractionRunner(df_het):
-    comparisons_to_make = []
+    #comparisons_to_make = []
 
     for _, row in df_het.iterrows():
         domains = row['domains']
@@ -28,9 +32,10 @@ def heteromericInteractionRunner(df_het):
             subunits = interaction_pair.split('-')
             mutual_domains = duplicateIntersection(*(domains[C] for C in subunits))
             code = ('MUT' if domains[subunits[0]]== domains[subunits[1]] else 'MPA') if mutual_domains else 'DNO'
-            comparisons_to_make.append((f'{row["PDB_ID"]}_{subunits[0]}_{subunits[1]}',f'{row["PDB_ID"]}_{subunits[1]}_{subunits[0]}',code))
+            #comparisons_to_make.append(
+            yield (f'{row["PDB_id"]}_{subunits[0]}_{subunits[1]}',f'{row["PDB_id"]}_{subunits[1]}_{subunits[0]}',code)
 
-    return comparisons_to_make
+    return# comparisons_to_make
 
 def shuffledInteractionDomains(df):
     table_of_observations = [[0,0],[0,0]]
@@ -102,10 +107,7 @@ def newFPS(df_HET, df_HOM,match_partials=False):
                 continue
             yield (chain_HET,chain_HOM)
 
-
-
-                  
-                    
+          
 
 def sharedMatchingAlgorithm2(df_HET, df_HOM):
     inverted_domains_HOM_full = invertCSVDomains(df_HOM,False,True)
@@ -151,10 +153,7 @@ def sharedMatchingAlgorithm2(df_HET, df_HOM):
 
     print(fail_c)
     return comparisons_to_make
-                    
 
-
-    
 
 def sharedMatchingAlgorithm(df_HET, df_HOM):
     inverted_domains_HOM_full = invertCSVDomains(df_HOM)
@@ -533,48 +532,59 @@ def paralleliseAlignment(pdb_pairs,file_name):
         f_writer = csv.writer(csvfile)
         f_writer.writerow(data_columns)
 
-        for ((key,code),p_value) in pool.imap_unordered(calculatePvalue,pdb_pairs,chunksize=50):
+        for ((key,code),p_value) in pool.imap_unordered(partial(calculatePvalue,remove_files=True),pdb_pairs,chunksize=50):
             if p_value != 'error':
                 f_writer.writerow(['{0}_{1}_{4}_{2}_{3}_{5}'.format(*key),code]+[f'{n:.2e}' if isinstance(n,float) else str(n) for n in p_value])
 
 def getDataset(heteromeric=True,filter=100):
     if not os.path.isfile(f'{"Heteromeric" if heteromeric else "Homomeric"}_complexes_{filter}.csv'):
-        makeDatasets(threshold=args.filter_level,use_identical_subunits=True,relabel=True)
+        makeDatasets(threshold=args.filter_level,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=True)
     return loadCSV(f'{"Heteromeric" if heteromeric else "Homomeric"}_complexes_{filter}.csv')
 
 def main(args):
-
     if args.filter_level not in VALID_CLUSTERS:
         print('Invalid filter level')
         return False
 
-    heteromeric_data = getDataset(True,args.filter_level)
+    heteromeric_data = getDataset(True,args.filter_level)[:10]
+
+    if args.stats:
+        table, stats = shuffledInteractionDomains(heteromeric_data)
+        print(f'Test statistic:\n\t{stats[0]:.3f}\np-value:\n\t{stats[1]:.3e}')
+        print('Table:\n',table)
+
+    if args.pullINT:
+        pullXML(heteromeric_data['PDB_id'])
 
     if args.exec_mode == 'heteromeric':
         comparison_generator = heteromericInteractionRunner(heteromeric_data)
     elif args.exec_mode == 'precusor':
         homomeric_data = getDataset(False,args.filter_level)
+        if args.pullINT:
+            pullXML(homomoeric['PDB_id'])
         comparison_generator = precusorInteractionRunner(heteromeric_data,homomeric_data)
     else:
         print('Unknown comparison type')
         return False     
         
     print('Running in parallel')
-    paralleliseAlignment(proteinGenerator,args.file_name)
+    paralleliseAlignment(comparison_generator,args.file_name)
     return
    
-        
 if __name__ == "__main__":
+    os.environ['EMBOSS_ACDROOT'] = os.getcwd()
     parser = argparse.ArgumentParser(description = 'Domain comparison suite')
     
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-H", "--heteromeric", action="store_const",dest='exec_mode',const='heteromeric')
     group.add_argument("-P", "--precursor", action="store_const",dest='exec_mode',const='precusor')
 
-    parser.add_argument('--filter', type=int,dest='filter_level')
-    parser.add_argument('--file_name', type=str,dest='file_name')
+    parser.add_argument('--filter', type=int,dest='filter_level',default=100)
+    parser.add_argument('--file_name', type=str,dest='file_name',default='Data')
+    parser.add_argument('--stats', action="store_true")
+    parser.add_argument('--pullINT', action="store_true")
 
-    parser.set_defaults(exec_mode='heteromeric',file_name=None,filter_level=100)
+    parser.set_defaults(exec_mode='heteromeric')
 
     args = parser.parse_args()
     main(args)

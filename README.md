@@ -32,32 +32,32 @@ In addition, a working version of needle from [Emboss](http://emboss.sourceforge
 
 Functionality can be tested by running the following command.
 ```shell
-python -m pytest
+python -m pytest tests/
 ```
 Errors at this stage are likely due to a missing needle exectuable or required python packages.
 
 ## Usage examples 
 A simple example can be run by providing the two subunits to compare.
 ```python
-python binding\_alignment.py 3WJM A 3WJM B
+python binding_alignment.py 3WJM A 3WJM B
 ```
 Which calculates the SuBSeA confidence between the two heteromeric interfaces of the protein complex 3WJM.
 
 If the interaction under examination is not isologous, alternate chains can be provided for comparison.
 ```python
-python binding\_alignment.py 2IX2 A 2IX2 B --alternate_chains C A
+python binding_alignment.py 2IX2 A 2IX2 B --alternate_chains C A
 ```
 Which runs the comparison of the interactions between chains A->C with the interaction between chains B->A.
 
 Interfaces can also be compared across subunits, such as analysing homomeric precursors.
 ```python
-python binding\_alignment.py 15C8 L 4OFD A --alternate_chains H B
+python binding_alignment.py 15C8 L 4OFD A --alternate_chains H B
 ```
 Again which compared the interaction between 15C8 chains L->H and 4ODF chains A->B.
 
 A larger scale analysis can be conducted with 
 ```python
-python pipeline\_runner.py --pullINT
+python pipeline_runner.py --pullINT
 ```
 Which will compile the heteromeric comparisons needed from the dataset, and automatically download any associated files.
 

@@ -204,11 +204,9 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
                     print('pulling for ',PDB_code)
                     pulled_new_domains = True
                     domain_dict[PDB_code] = pullDomains(PDB_code)
-                
                 domain_info = makeFormattedDomainInformation(meaningful_interfaces,domain_dict[PDB_code])
                 if not domain_info:
                     continue
-                
                 new_rows.append({'PDB_id':row['PDB ID'], 'interfaces':meaningful_interfaces, 'domains':domain_info,
                     'BSAs': {K:BSA_av[K] for K in meaningful_interfaces}})
 

@@ -5,19 +5,13 @@ from utility import loadCSV, invertCSVDomains, makeDatasets, VALID_CLUSTERS
 from pisa_XML import pullXML
 
 ##global imports
-from numpy.random import choice
-from collections import defaultdict
 from functools import partial
+from scipy.stats import fisher_exact
+from multiprocessing import Pool
 import os
 import csv
 import argparse
-
 import numpy as np
-from itertools import product
-
-from scipy.stats import fisher_exact
-
-from multiprocessing import Pool
 
 def heteromericInteractionRunner(df_het):
     for _, row in df_het.iterrows():
@@ -141,7 +135,7 @@ def main(args):
     print('Running in parallel')
     paralleliseAlignment(comparison_generator,args.file_name)
     return
-   
+
 if __name__ == "__main__":
     os.environ['EMBOSS_ACDROOT'] = os.getcwd()
     parser = argparse.ArgumentParser(description = 'Domain comparison suite')

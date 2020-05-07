@@ -283,7 +283,7 @@ def MatAlign(pdb_1,chain_1,pdb_2,chain_2,needle_result=None,matrix_result=None):
 def calculatePvalue(pdb_combination,WI_=False,remove_files=False):
     (het,hom,code) = pdb_combination
     args = (het[:4].upper(),het[5],hom[:4].upper(),hom[5],het[7],hom[7])
-    
+
     try:
         n_r, m_r = generateAssistiveFiles(args,write_intermediates=WI_)
         p_value = MatAlign(*args[:4],needle_result=n_r,matrix_result=m_r)

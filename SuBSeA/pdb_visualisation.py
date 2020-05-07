@@ -6,7 +6,7 @@ from collections import defaultdict
 import numpy as np
 from itertools import product
 
-from scipy.stats import expon,linregress,ks_2samp,anderson_ksamp,mannwhitneyu,epps_singleton_2samp,brunnermunzel,spearmanr
+from scipy.stats import linregress,ks_2samp,brunnermunzel,spearmanr
 from SuBSeA.utility import loadCSV
 from SuBSeA.domains import readDomains, duplicateIntersection
 
@@ -157,14 +157,6 @@ def getFrac(data,key):
 def plotData(datas,ax=None,stat_func=ks_2samp,merge_nones=True):
     #if isinstance(datas,list) and not isinstance(datas[0],str):
     labels = ['1']*len(datas)
-    #else:
-    #    labels = datas
-    #    datas = [loadDict(d) for d in labels]
-    #if merge_nones:
-    #    cleaned_datas = [np.log10([val[0] or 1 for val in data.values() if (val!='error' and val[1]<300)]) for data in datas]
-    #else:
-    #    cleaned_datas = [np.log10(list(filter(lambda x: isinstance(x[0],float),data.values()))) for data in datas]
-    #
     cleaned_datas= datas
     main_range=(-25,0)
     
@@ -225,8 +217,6 @@ def plotSNS2(df,X_C='pval_F',Y_C='similarity',code=None):
 
     plt.show(block=False)
 
-
-
 def plotCats(df,ax=None,ls='-',cmap='green',pval_type=''):
     N=6
     if ax is None:
@@ -258,32 +248,17 @@ def CfD(data,ax,c,ls):
     data_sorted = np.sort(data)
     ax.plot(data_sorted,xs,c=c,lw=1,ls=ls,alpha=0.75)
 
-#ff= pd.concat([mp,rp],ignore_index=1)
+
 def plotGrid(df):
     df = df.loc[df['sg']<6]
     df = df.loc[df['hits']>0]
     df = df.loc[df['hits']<=8]
-    
-    #print(len(df))
 
-    #match_C = sum(df['match']=='match')
-    #random_C = sum(df['match']=='random')
-    
-    #drop_samp = np.random.choice(np.arange(match_C,len(df)),size=random_C-match_C,replace=False)
-    #print(np.mean(drop_samp))
-    
-    #df.drop(df.index[drop_samp],inplace=True)
-
-
-
-    g = sns.FacetGrid(df, row="sg", col="hits",hue='match', margin_titles=True,sharex=True,sharey=True)
-        
+    g = sns.FacetGrid(df, row="sg", col="hits",hue='match', margin_titles=True,sharex=True,sharey=True) 
     g.map(plt.hist, "pval_T", bins=np.linspace(-15,0,201),density=0,histtype='step',alpha=0.75).add_legend()
     g.set(yscale = 'log',ylim=[1,1e5])#1e-5,1])
     #return g
     plt.show(0)
-
-
 
 def hexbin(x, y, color, **kwargs):
     cmap = plt.get_cmap('cividis')
@@ -293,7 +268,6 @@ def hexbin(x, y, color, **kwargs):
     plt.colorbar()
     print(spearmanr(x,y))
     print(np.median(x),np.mean(x))
-
 
 def plotNormOVR(df,sigma=-np.log10(.05),x_var='norm_OVR',stat_func=brunnermunzel):
     df['sig']=df.pval_S>=sigma

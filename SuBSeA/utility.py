@@ -77,7 +77,6 @@ def writeCSV(df,fname):
 def scrapePDBCodes(df):
     with open('periodic_pdb_codes.txt', 'w') as file_out:
         file_out.write(', '.join(df['PDB ID']))
-    
 
 def invertCSVDomains(df, partials=False, homomeric=False):
     dom_dict = {}
@@ -88,8 +87,6 @@ def invertCSVDomains(df, partials=False, homomeric=False):
             else:
                 dom_dict[row['PDB_id']] = row['domains']
     return invertDomains(dom_dict,partials)
-        
-
 
 def downloadPeriodicData(fpath=''):
     print(f'Downloading periodic data from Science')
@@ -97,15 +94,15 @@ def downloadPeriodicData(fpath=''):
     'field_highwire_adjunct_files/3/aaa2245-Ahnert-SM-table-S2.xlsx', f'{fpath}PeriodicTable.xlsx')
     print(f'Download successful')
 
-def makeDatasets(fpath='',heteromeric=True, threshold=100,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=False):
+def makeDatasets(fpath='',heteromeric=True, threshold=100,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=False,domain_type='CATH'):
     if not os.path.exists(f'{fpath}PeriodicTable.xlsx'):
         downloadPeriodicData(fpath)
 
-    data = mergeSheets(fpath,heteromeric,use_identical_subunits,relabel,DEBUG_ignore_domains)
+    data = mergeSheets(fpath,heteromeric,use_identical_subunits,relabel,DEBUG_ignore_domains,domain_type)
     print('Data has been merged, filtering now...')
     
     post_filter = filterDataset(data,threshold) if threshold != 100 else data
-    writeCSV(post_filter,('Heteromeric' if heteromeric else 'Homomeric')+f'_complexes_{threshold}.csv')
+    writeCSV(post_filter,('Heteromeric' if heteromeric else 'Homomeric')+f'_complexes_{domain_type}_{threshold}.csv')
     print('Dataset written successfully')
 
 def loadAssistiveFiles(relabel):
@@ -149,7 +146,7 @@ def makeFormattedDomainInformation(meaningful_interfaces,domain_slice):
     return {dom.split(':')[0]:eval(dom.split(':')[1]) for dom in domain_info_raw.split(';') if len(dom)>1}
 
                 
-def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=True):
+def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=True,domain_type='CATH'):
 
     DEX_interface = 'T' if heteromerics else 'I'
 
@@ -203,7 +200,7 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
                 if PDB_code not in domain_dict:
                     print('pulling for ',PDB_code)
                     pulled_new_domains = True
-                    domain_dict[PDB_code] = pullDomains(PDB_code)
+                    domain_dict[PDB_code] = pullDomains(PDB_code,domain_type)
                 domain_info = makeFormattedDomainInformation(meaningful_interfaces,domain_dict[PDB_code])
                 if not domain_info:
                     continue

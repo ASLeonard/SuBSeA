@@ -77,7 +77,6 @@ def heteromericOverlapStats(df,df2):
             ##HH type interaction
             overlap_domains = set(local_domains[0]) & set(local_domains[1])
             unique_domains = set(local_domains[0]) ^ set(local_domains[1])
-            
 
             if overlap_domains:
                 fractions[0][any(od in homomeric_domains for od in set(overlap_domains))]+=1
@@ -100,18 +99,18 @@ def paralleliseAlignment(pdb_pairs,file_name):
             if p_value != 'error':
                 f_writer.writerow(['{0}_{1}_{4}_{2}_{3}_{5}'.format(*key),code]+[f'{n:.2e}' if isinstance(n,float) else str(n) for n in p_value])
 
-def getDataset(heteromeric=True,filter_level=100):
-    if not os.path.isfile(f'{"Heteromeric" if heteromeric else "Homomeric"}_complexes_{filter_level}.csv'):
+def getDataset(heteromeric=True,filter_level=100,domain_type='CATH'):
+    if not os.path.isfile(f'{"Heteromeric" if heteromeric else "Homomeric"}_complexes_{domain_type}_{filter_level}.csv'):
         print(f'Unable to find {"Heteromeric" if heteromeric else "Homomeric"} dataset, generating it now')
-        makeDatasets(threshold=args.filter_level,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=True)
-    return loadCSV(f'{"Heteromeric" if heteromeric else "Homomeric"}_complexes_{filter_level}.csv')
+        makeDatasets(threshold=args.filter_level,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=True,domain_type=domain_type)
+    return loadCSV(f'{"Heteromeric" if heteromeric else "Homomeric"}_complexes_{domain_type}_{filter_level}.csv')
 
 def main(args):
     if args.filter_level not in VALID_CLUSTERS:
         print('Invalid filter level')
         return False
 
-    heteromeric_data = getDataset(True,args.filter_level)
+    heteromeric_data = getDataset(True,args.filter_level,args.domains)
 
     if args.stats:
         table, stats = shuffledInteractionDomains(heteromeric_data)
@@ -124,7 +123,7 @@ def main(args):
     if args.exec_mode == 'heteromeric':
         comparison_generator = heteromericInteractionRunner(heteromeric_data)
     elif args.exec_mode == 'precursor':
-        homomeric_data = getDataset(False,args.filter_level)
+        homomeric_data = getDataset(False,args.filter_level,args.domains)
         if args.pullINT:
             pullXML(homomeric_data['PDB_id'])
         comparison_generator = precursorInteractionRunner(heteromeric_data,homomeric_data)

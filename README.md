@@ -4,7 +4,7 @@
 
 # *Su*bunit *B*inding *Se*quence *A*lignment (SuBSeA)
 
-Software to test qualitative hypotheses generated from the [polyomino evolution through duplication study](https://github.com/ASLeonard/duplication "Polyomino duplication repository").
+Software to test qualitative hypotheses generated from the [polyomino evolution through duplication study](https://github.com/ASLeonard/polyomino_duplication "Polyomino duplication repository").
 
 This program compares the binding residues from macromolecular interfaces with optimal sequence alignment to estimate the likelihood that two protein complex interactions are related. A more detailed description of the analysis can be found in the methods [here](https://www.biorxiv.org/content/10.1101/2020.04.22.054783v1).
 

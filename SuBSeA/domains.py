@@ -5,8 +5,8 @@ import requests
 from collections import defaultdict, Counter
 
 
-def pullDomains(pdb_id, style_key='CATH-B'):
-     assert style_key == 'SCOP' or style_key == 'CATH-B', 'Unknown style_key: {}'.format(style_key)
+def pullDomains(pdb_id, style_key='CATH'):
+     #assert style_key == 'SCOP' or style_key == 'CATH-B', 'Unknown style_key: {}'.format(style_key)
 
      data=requests.get('http://www.ebi.ac.uk/pdbe/api/mappings/{}/{}'.format('scop' if style_key == 'SCOP' else 'cath_b', pdb_id),timeout=5).json()
      domain_arch=defaultdict(list)

@@ -20,7 +20,7 @@ def test_pull_XML(capsys):
 def test_pull_domains(capsys):
     print('Starting domain pulling test, stdout is enabled')
     with capsys.disabled():
-        domains.writeDomains(['4P69','1AI2','4WTO','1A1S','2PEY'],'CATH-B',fname='temporary.json')
+        domains.writeDomains(['4P69','1AI2','4WTO','1A1S','2PEY'],'CATH',fname='temporary.json')
     print('Cleaning out generated files')
     os.remove('temporary.json')
     print('Test complete!\n')

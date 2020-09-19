@@ -62,4 +62,4 @@ def test_heteromeric_grouping(capsys):
     with capsys.disabled():
         print('Excluding immunoglobulins')
     assert pdb_visualisation.groupHeteromericBSAs(90,True) is not None, 'Failed to group heteromeric interactions'
-    os.remove('Heteromeric_complexes_90.csv')
+    os.remove('Heteromeric_complexes_CATH_90.csv')

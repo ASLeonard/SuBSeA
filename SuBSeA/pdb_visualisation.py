@@ -14,12 +14,12 @@ from matplotlib.colors import Normalize
  
 
 
-def groupHeteromericBSAs(threshold=100,filter_immunoglobulins=False):
+def groupHeteromericBSAs(threshold=100,domain_type='CATH',filter_immunoglobulins=False):
 
     def domainMatchFractional(domains,c1,c2):
         return len(duplicateIntersection(domains[c1],domains[c2])) / max(len(domains[c1]),len(domains[c2]))
 
-    df = loadCSV(f'Heteromeric_complexes_{threshold}.csv')
+    df = loadCSV(f'Heteromeric_complexes_{domain_type}_{threshold}.csv')
     #bsa_het = convertH(df_het,filter_immunoglobulins)
 
     rows = []

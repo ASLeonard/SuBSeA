@@ -88,10 +88,10 @@ def heteromericOverlapStats(df,df2):
             \nDH: {fractions[1][0]}/{sum(fractions[1])} ({fractions[1][0]/sum(fractions[1]):.3f}%)')
     return fractions
 
-def paralleliseAlignment(pdb_pairs,file_name):
+def paralleliseAlignment(pdb_pairs,file_name,domain,cluster):
     data_columns = ['id','code','pval_F','pval_S','pval_T','pval_F2','pval_S2','pval_T2','hits','similarity','score','align_length','overlap']
 
-    with Pool() as pool, open(f'{file_name}_comparison.csv','w', newline='') as csvfile:
+    with Pool() as pool, open(f'{file_name}_{domain}_{cluster}_comparison.csv','w', newline='') as csvfile:
         f_writer = csv.writer(csvfile)
         f_writer.writerow(data_columns)
 
@@ -102,7 +102,8 @@ def paralleliseAlignment(pdb_pairs,file_name):
 def getDataset(heteromeric=True,filter_level=100,domain_type='CATH'):
     if not os.path.isfile(f'{"Heteromeric" if heteromeric else "Homomeric"}_complexes_{domain_type}_{filter_level}.csv'):
         print(f'Unable to find {"Heteromeric" if heteromeric else "Homomeric"} dataset, generating it now')
-        makeDatasets(threshold=args.filter_level,use_identical_subunits=True,relabel=True,DEBUG_ignore_domains=True,domain_type=domain_type)
+        makeDatasets(threshold=args.filter_level,use_identical_subunits=False,relabel=True,DEBUG_ignore_domains=False,domain_type=domain_type)
+    print(f'Now loading dataset for {"Heteromeric" if heteromeric else "Homomeric"}_complexes_{domain_type}_{filter_level}.csv')
     return loadCSV(f'{"Heteromeric" if heteromeric else "Homomeric"}_complexes_{domain_type}_{filter_level}.csv')
 
 def main(args):
@@ -132,7 +133,7 @@ def main(args):
         return False
         
     print('Running in parallel')
-    paralleliseAlignment(comparison_generator,args.file_name)
+    paralleliseAlignment(comparison_generator,args.file_name,args.domains,args.filter_level)
     return
 
 if __name__ == "__main__":
@@ -147,8 +148,12 @@ if __name__ == "__main__":
     parser.add_argument('--file_name', type=str,dest='file_name',default='Data')
     parser.add_argument('--stats', action="store_true")
     parser.add_argument('--pullINT', action="store_true")
+    
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--CATH", action="store_const",dest='domains',const='CATH')
+    group.add_argument("--SCOP", action="store_const",dest='domains',const='SCOP')
 
-    parser.set_defaults(exec_mode='heteromeric')
+    parser.set_defaults(exec_mode='heteromeric',domains='CATH')
 
     args = parser.parse_args()
     main(args)

@@ -4,6 +4,7 @@ import json
 import gzip
 import shutil
 import urllib.request
+import requests
 import ast
 
 import pandas
@@ -105,16 +106,16 @@ def makeDatasets(fpath='',heteromeric=True, threshold=100,use_identical_subunits
     writeCSV(post_filter,('Heteromeric' if heteromeric else 'Homomeric')+f'_complexes_{domain_type}_{threshold}.csv')
     print('Dataset written successfully')
 
-def loadAssistiveFiles(relabel):
+def loadAssistiveFiles(relabel,domains):
     try:
-        domain_dict=readDomains('periodic')
+        domain_dict=readDomains(domains)
     except FileNotFoundError:
         print('given domain file doesn\'t exist, will start new one')
         domain_dict={}
 
     try:
         chain_map = chainMap() if relabel else {}
-        chain_mapE = chainMap('Extra') if relabel else {}
+        chain_mapE = chainMap('Extra') if relabel == 'extra' else {}
         chain_map_full = {**chain_map,**chain_mapE}
     except FileNotFoundError:
         print('Chain relabelling doesn\'t exist, using blank')
@@ -160,7 +161,7 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
     
     data_heteromers = pandas.read_excel(f'{fpath}PeriodicTable.xlsx',sheet_name=[0,2])
 
-    domain_dict, chain_map_full = loadAssistiveFiles(relabel)
+    domain_dict, chain_map_full = loadAssistiveFiles(relabel,domain_type)
     
     new_rows = []
     pulled_new_domains = False
@@ -200,7 +201,12 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
                 if PDB_code not in domain_dict:
                     print('pulling for ',PDB_code)
                     pulled_new_domains = True
-                    domain_dict[PDB_code] = pullDomains(PDB_code,domain_type)
+                    try:
+                        domain_dict[PDB_code] = pullDomains(PDB_code,domain_type)
+                    except requests.exceptions.Timeout:
+                        print('Timeout error on',PDB_code,' so skipping')
+                        continue
+
                 domain_info = makeFormattedDomainInformation(meaningful_interfaces,domain_dict[PDB_code])
                 if not domain_info:
                     continue
@@ -208,7 +214,7 @@ def mergeSheets(fpath='',heteromerics=True,use_identical_subunits=True,relabel=T
                     'BSAs': {K:BSA_av[K] for K in meaningful_interfaces}})
 
     if not DEBUG_ignore_domains and pulled_new_domains:
-        with open('domain_architectures_periodic.json', 'w') as file_out:
+        with open(f'domain_architectures_{domain_type}.json', 'w') as file_out:
             file_out.write(json.dumps(domain_dict))
 
     return pandas.DataFrame(new_rows)
@@ -268,7 +274,7 @@ def filterDataset(df,thresh,homomeric_mode=False):
 
 def chainMap(extra=None):
     chainmap = defaultdict(dict)
-    with open('chain_map{}.txt'.format(extra or ''),'r') as file_:
+    with open(f'chain_map{extra or ""}.txt','r') as file_:
         for line in file_:
             (pdb, file_chain, pdb_chain) = line.rstrip().split('\t')
             chainmap[pdb][file_chain] = pdb_chain

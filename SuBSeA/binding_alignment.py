@@ -15,7 +15,7 @@ import scipy.stats
 import scipy.special
 import requests
 
-BASE_PATH, FASTA_PATH, INT_PATH, PALIGN_PATH, NEEDLE_PATH = '', '', '', '', ''
+BASE_PATH, FASTA_PATH, INT_PATH, PALIGN_PATH, NEEDLE_PATH = '/scratch/asl47/SuBSeA', '/fasta/', '/INT/', '/palign/', '/needle/'
 needle_exec = ''
 
 def pullFASTA(pdb,chain):
@@ -193,7 +193,7 @@ def readPmatrixFile(pdb_1,chain_1,pdb_2,chain_2):
             swap[0]='-'
     return column_headers, row_headers, matrix
                 
-def generateAssistiveFiles(pdbs,write_intermediates=False):
+def generateAssistiveFiles(pdbs,write_intermediates=True):
     if write_intermediates:
         print('Writing intermediates')
     needleAlign(*pdbs[:4])
@@ -291,7 +291,7 @@ def calculatePvalue(pdb_combination,WI_=False,remove_files=False):
         print(het,hom,'!!Error!!:\t',e)
         p_value = 'error'
 
-    if remove_files:
+    if remove_files and False:
         cleanGeneratedFiles(*args[:4],remove_files=='full')
 
     return ((args,code),p_value)
@@ -313,7 +313,7 @@ def main(args):
 
     alt_chain_1, alt_chain_2 = args.alternate_chains or (args.chain_2,args.chain_1)
 
-    print(calculatePvalue([f'{args.subunit_1}_{args.chain_1}_{alt_chain_1}',f'{args.subunit_2}_{args.chain_2}_{alt_chain_2}','ignore'],remove_files='full')[1])
+    print(calculatePvalue([f'{args.subunit_1}_{args.chain_1}_{alt_chain_1}',f'{args.subunit_2}_{args.chain_2}_{alt_chain_2}','ignore'],remove_files=args.clean)[1])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'SuBSeA')
@@ -322,6 +322,7 @@ if __name__ == "__main__":
     parser.add_argument('subunit_2', type=str)
     parser.add_argument('chain_2', type=str)
     parser.add_argument('--alternate_chains', nargs='+',type=str,default=None)
+    parser.add_argument('--clean', default=False,action='store_true')
     args = parser.parse_args()
 
     main(args)

@@ -10,7 +10,7 @@ import urllib.request
 import shutil
 import argparse
 
-BASE_PATH, XML_PATH, INT_PATH = '', '', ''
+BASE_PATH, XML_PATH, INT_PATH = '/scratch/asl47/SuBSeA', '/XML/', '/INT/'
 
 def checkINTExisting(df):
     missing_IDs = [row['PDB_id'] for _,row in clean_df.iterrows() if not os.path.exists(f'{BASE_PATH}{INT_PATH}/{row["PDB_id"].upper()}.int')]
@@ -29,13 +29,16 @@ def pullXML(pdb_code_file):
     else:
         pdbs = pdb_code_file
 
-    print(f'Loaded PDB files, there were {len(pdbs)} codes')
+    pdbs = [pdb_id for pdb_id in pdbs if not os.path.isfile(f'{BASE_PATH}{INT_PATH}{pdb_id.upper()}.int')]
+
+    print(f'Loaded PDB files, there were {len(pdbs)} codes which need generating')
 
     URL_base = 'http://www.ebi.ac.uk/pdbe/pisa/cgi-bin/interfaces.pisa?'
     PER_CALL = 40
 
     print('Downloading XML from EBI')
     for slice_ in range(0,len(pdbs),PER_CALL):
+        continue
         url=URL_base+','.join(map(str.lower,pdbs[slice_:slice_+PER_CALL]))
         with urllib.request.urlopen(url) as response, open(f'{BASE_PATH}{XML_PATH}XML_temp.xml', 'wb') as out_file: # nosec
             shutil.copyfileobj(response, out_file)
@@ -43,7 +46,8 @@ def pullXML(pdb_code_file):
         print(f'Split chunk {slice_} into XML_temp.xml')
 
     print('Cleaning temporary files')
-    os.remove(f'{BASE_PATH}{XML_PATH}XML_temp.xml')
+    if os.path.isfile(f'{BASE_PATH}{XML_PATH}XML_temp.xml'):
+        os.remove(f'{BASE_PATH}{XML_PATH}XML_temp.xml')
 
     print('Parsing individual files')
     parseXML(pdbs)
@@ -144,7 +148,7 @@ def parseXML(xml_list):
                         int_file.write(f'{chain}\t{res_seq}\t{res_name}\t' + '\t'.join(inter[chain][res_seq])+'\n')
         else:
             print(f'PDB entry {pdb_entry} status was not okay')
-        os.remove(f'{BASE_PATH}{INT_PATH}{pdb_entry}.xml')
+        os.remove(f'{BASE_PATH}{XML_PATH}{pdb_entry}.xml')
 
 def main(args):
 

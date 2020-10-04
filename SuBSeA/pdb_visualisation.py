@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 import pandas as pd
 import json
@@ -103,17 +104,22 @@ def loadND(file_ID):
 
 def loadDF(file_ID,json_save = False,csv_save=False):
     if csv_save:
-        return pd.read_csv(f'{file_ID}_comparison.csv')
-    raw_data = (loadDict if json_save else loadND)(file_ID)
-    rows = []
-    for results in (raw_data.values() if json_save else raw_data):
-        if results == 'error':
-            continue
-        pval, N_hits, similarity = results
-        rows.append({'pval':pval or 1,'similarity':similarity,'sg':int(similarity//5),'hits':N_hits})
+        df = pd.read_csv(f'{file_ID}_comparison.csv')
+    else:
+        raw_data = (loadDict if json_save else loadND)(file_ID)
+        rows = []
+        for results in (raw_data.values() if json_save else raw_data):
+            if results == 'error':
+                continue
+            pval, N_hits, similarity = results
+            rows.append({'pval':pval or 1,'similarity':similarity,'sg':int(similarity//5),'hits':N_hits})
         
-    df = pd.DataFrame(rows)
-    df['pval'] = np.log10(df['pval'])
+        df = pd.DataFrame(rows)
+        
+    for pval in ('pval_F','pval_S','pval_T','pval_F2','pval_S2','pval_T2'):
+            df[pval] = -1*np.log10(df[pval])
+            print(pval)
+
     return df
 
 def splitData(df,thresh=80):
@@ -324,7 +330,7 @@ def plotHeteromericConfidenceDecay(df,x_var = 'pval_S',sigma=-1,sim_thresh=95,MI
 
         print(f'Power law fit: {slope:.3f}, initial drop is {cdf[1]*100:.1f}%')
 
-    plt.show(0)
+    plt.show(block=False)
 
 def plotGap(df,sigma=3,X_C='similarity',Y_C='gapX',H_C='norm_OVR'):
     df = df.loc[df['similarity'] < 95]
@@ -346,3 +352,12 @@ def plotGap(df,sigma=3,X_C='similarity',Y_C='gapX',H_C='norm_OVR'):
     g.map(fcc, X_C,Y_C,H_C)
     #g.map(sns.kdeplot,'pval_S2','norm_OVR')
     plt.show(0)
+
+def biaxial(cath,scop):
+    cath = loadDF('Data_CATH_90',csv_save=True)
+    scop = loadDF('Data_SCOP_90',csv_save=True)
+    
+    mut = set(cath['id']).intersection(set(scop['id']))
+    cath_only = set(cath['id']).difference(set(scop['id']))
+    scop_only = set(scop['id']).difference(set[cath['id']))
+
